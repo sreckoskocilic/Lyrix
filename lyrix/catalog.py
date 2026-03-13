@@ -1,13 +1,24 @@
 import json
+import os
 import sys
 from collections import Counter
 from datetime import datetime
+from difflib import SequenceMatcher
 from pathlib import Path
 from threading import Lock
 
 ENV_ABS_PATH = Path(__file__).parent.parent  # project root
 _FROZEN = getattr(sys, "frozen", False)
-CATALOG_PATH = Path.home() / ".lyrix" / "lyrics_catalog.json"
+
+if sys.platform == "win32":  # pragma: no cover
+    _BASE_DIR = (
+        Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")) / "Lyrix"
+    )
+else:
+    _BASE_DIR = Path.home() / ".lyrix"
+
+CATALOG_PATH = _BASE_DIR / "lyrics_catalog.json"
+
 SEPARATOR = "=" * 40
 FONT_NAME = "Roboto Mono for Powerline"
 
@@ -98,17 +109,32 @@ def _detect_album(mp3s: list) -> tuple[str, str] | None:
     valid = [(a, al) for a, _, al in tags if a and al]
     if not valid or len(valid) < max(2, len(mp3s) * 0.7):
         return None
-    album_counts = Counter(al.lower() for _, al in valid)
+    valid_lower = [(a.lower(), al.lower(), a, al) for a, al in valid]
+    album_counts = Counter(al_l for _, al_l, _, _ in valid_lower)
     top_album, top_count = album_counts.most_common(1)[0]
     if top_count / len(valid) < 0.7:
         return None
-    artist_counts = Counter(a.lower() for a, al in valid if al.lower() == top_album)
+    matching = [(a_l, a) for a_l, al_l, a, _ in valid_lower if al_l == top_album]
+    if not matching:
+        return None  # pragma: no cover - defensive check, nearly impossible to trigger
+    artist_counts = Counter(a_l for a_l, a in matching)
     top_artist = artist_counts.most_common(1)[0][0]
-    album_name = next(al for _, al in valid if al.lower() == top_album)
-    artist_name = next(
-        a for a, al in valid if a.lower() == top_artist and al.lower() == top_album
-    )
+    album_name = next(al for _, al_l, _, al in valid_lower if al_l == top_album)
+    artist_name = next(a for a_l, a in matching if a_l == top_artist)
     return artist_name, album_name
+
+
+def _artist_matches(expected: str, actual: str, threshold: float = 0.8) -> bool:
+    """Check if actual artist reasonably matches expected artist using fuzzy matching."""
+    if not expected or not actual:
+        return False
+
+    expected_norm = expected.lower().strip()
+    actual_norm = actual.lower().strip()
+    if expected_norm == actual_norm:
+        return True
+    ratio = SequenceMatcher(None, expected_norm, actual_norm).ratio()
+    return ratio >= threshold
 
 
 # ── Catalog ───────────────────────────────────────────────────────────────────

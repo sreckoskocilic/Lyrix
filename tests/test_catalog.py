@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from lyrix.catalog import Catalog, _detect_album
+from lyrix.catalog import Catalog, _artist_matches, _detect_album
 
 
 class DetectAlbumTests(unittest.TestCase):
@@ -34,6 +34,28 @@ class DetectAlbumTests(unittest.TestCase):
 
         with patch("lyrix.catalog._read_mp3_tags", side_effect=fake_tags):
             self.assertIsNone(_detect_album(mp3s))
+
+
+class ArtistMatchesTests(unittest.TestCase):
+    def test_exact_match(self):
+        self.assertTrue(_artist_matches("Nile", "Nile"))
+        self.assertTrue(_artist_matches("Nile", "nile"))
+
+    def test_no_match_empty(self):
+        self.assertFalse(_artist_matches("", "Nile"))
+        self.assertFalse(_artist_matches("Nile", ""))
+        self.assertFalse(_artist_matches("", ""))
+
+    def test_close_match(self):
+        self.assertTrue(_artist_matches("Nile", "Nile "))
+        self.assertTrue(_artist_matches("Nile", "NILE"))
+
+    def test_different_artists(self):
+        self.assertFalse(_artist_matches("Nile", "Other Artist"))
+        self.assertFalse(_artist_matches("Nile", "Nile Rodgers"))
+
+    def test_threshold_80_percent(self):
+        self.assertFalse(_artist_matches("Nile", "Nile Rodgers"))
 
 
 class CatalogTests(unittest.TestCase):

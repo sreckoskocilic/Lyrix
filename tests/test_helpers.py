@@ -9,6 +9,7 @@ from lyrix.catalog import (
     _format_track,
     _song_header,
     _read_mp3_tags,
+    _read_mp3_track_num,
     _detect_album,
     _extract_name,
     get_resource_path,
@@ -114,6 +115,56 @@ class Mp3TagFallbackTests(unittest.TestCase):
 
         with patch("lyrix.catalog._read_mp3_tags", return_value=("", "", "")):
             self.assertIsNone(_detect_album(mp3s))
+
+
+class Mp3TrackNumTests(unittest.TestCase):
+    def test_read_mp3_track_num_from_tags(self):
+        class FakeTag:
+            def __init__(self, text):
+                self.text = [text]
+
+        class FakeAudio:
+            def __init__(self, track_num):
+                self.tags = {"TRCK": FakeTag(track_num)}
+
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "file.mp3"
+            path.touch()
+            with patch("mutagen.mp3.MP3", return_value=FakeAudio("5")):
+                self.assertEqual(_read_mp3_track_num(path), 5)
+
+    def test_read_mp3_track_num_with_slash(self):
+        class FakeTag:
+            def __init__(self, text):
+                self.text = [text]
+
+        class FakeAudio:
+            def __init__(self, track_num):
+                self.tags = {"TRCK": FakeTag(track_num)}
+
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "file.mp3"
+            path.touch()
+            with patch("mutagen.mp3.MP3", return_value=FakeAudio("3/12")):
+                self.assertEqual(_read_mp3_track_num(path), 3)
+
+    def test_read_mp3_track_num_no_tags(self):
+        class FakeAudio:
+            def __init__(self):
+                self.tags = None
+
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "file.mp3"
+            path.touch()
+            with patch("mutagen.mp3.MP3", return_value=FakeAudio()):
+                self.assertEqual(_read_mp3_track_num(path), 0)
+
+    def test_read_mp3_track_num_mutagen_unavailable(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "file.mp3"
+            path.touch()
+            with patch("mutagen.mp3.MP3", side_effect=ImportError()):
+                self.assertEqual(_read_mp3_track_num(path), 0)
 
 
 if __name__ == "__main__":

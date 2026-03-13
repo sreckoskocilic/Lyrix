@@ -81,10 +81,38 @@ class ScanAlbumDirTests(unittest.TestCase):
         browser = self._make_browser(album)
 
         with patch("lyrix.browser._read_mp3_tags", side_effect=fake_tags):
-            added, skipped, failed = browser._scan_album_dir("Artist", "Album A", mp3s)
+            added, skipped, failed, matched = browser._scan_album_dir(
+                "Artist", "Album A", mp3s
+            )
 
         self.assertEqual((added, skipped, failed), (0, 0, len(mp3s)))
         self.assertEqual(len(self.catalog), 0)
+
+    def test_album_scan_partial_title_match(self):
+        mp3s = [Path(self.tmpdir.name) / "Ruins.mp3"]
+        for p in mp3s:
+            p.touch()
+
+        def fake_tags(path):
+            return "Nile", "Ruins", "In Their Darkened Shrines"
+
+        # Album track has full title "In Their Darkened Shrines: IV. Ruins"
+        album_tracks = [(4, _FakeTrack("In Their Darkened Shrines: IV. Ruins"))]
+        album = _FakeAlbum(
+            "In Their Darkened Shrines", album_tracks, artist_name="Nile"
+        )
+        browser = self._make_browser(album)
+
+        with patch("lyrix.browser._read_mp3_tags", side_effect=fake_tags):
+            added, skipped, failed, matched = browser._scan_album_dir(
+                "Nile", "In Their Darkened Shrines", mp3s
+            )
+
+        self.assertEqual((added, skipped, failed), (1, 0, 0))
+        self.assertIn("ruins", matched)
+        self.assertEqual(len(self.catalog), 1)
+        entry = self.catalog.get("Nile", "In Their Darkened Shrines: IV. Ruins")
+        self.assertIsNotNone(entry)
 
     def test_partial_album_scan_triggers_per_file_retry(self):
         mp3s = [

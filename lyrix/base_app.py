@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -6,7 +7,7 @@ import tkinter as tk
 from tkinter import ttk
 
 try:
-    from .catalog import ENV_ABS_PATH, FONT_NAME, _FROZEN, get_resource_path
+    from .catalog import ENV_ABS_PATH, FONT_NAME, get_resource_path
 except ImportError:
     # Allow running as a script (module executed directly)
     import pathlib
@@ -15,9 +16,34 @@ except ImportError:
     parent = str(pathlib.Path(__file__).resolve().parent.parent)
     if parent not in sys.path:
         sys.path.insert(0, parent)
-    from catalog import ENV_ABS_PATH, FONT_NAME, _FROZEN, get_resource_path  # type: ignore
+    from catalog import ENV_ABS_PATH, FONT_NAME, get_resource_path  # type: ignore
 
-_SETTINGS_PATH = Path.home() / ".lyrix" / "settings.json"
+if sys.platform == "win32":
+    _BASE_DIR = (
+        Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")) / "Lyrix"
+    )
+else:
+    _BASE_DIR = Path.home() / ".lyrix"
+
+_SETTINGS_PATH = _BASE_DIR / "settings.json"
+LOG_PATH = _BASE_DIR / "lyrix.log"
+
+
+def _setup_logging():
+    """Configure logging to file."""
+    _BASE_DIR.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(
+        level=logging.WARNING,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.FileHandler(LOG_PATH),
+            logging.StreamHandler(),
+        ],
+    )
+
+
+_setup_logging()
+
 
 def _year_sort(year_str: str) -> int:
     """Convert a year string to a sort key. Unknown/missing years sort last."""

@@ -52,20 +52,28 @@ python menu.py
 |------|---------|
 | `lyrics_catalog.json` | Persistent catalog of fetched lyrics (gitignored) |
 | `settings.json` | Window geometry and sash position (gitignored) |
+| `lyrix.log` | Application log file (warnings and errors) |
+
+**Data locations:**
+- **macOS/Linux**: `~/.lyrix/`
+- **Windows**: `%APPDATA%\Lyrix\`
 
 ## Project structure
 
 ```
 lyrix/
 ├── lyrix/
-│   ├── browser.py     # Lyrics Browser app
-│   ├── search.py      # Lyrics Search app
-│   ├── catalog.py     # Persistent catalog + MP3 tag helpers
-│   └── base_app.py    # Shared base class and settings
-├── .env               # API token (gitignored)
+│   ├── __init__.py      # Package init
+│   ├── __main__.py      # Entry point
+│   ├── browser.py       # Lyrics Browser app
+│   ├── search.py        # Lyrics Search app
+│   ├── catalog.py       # Persistent catalog + MP3 tag helpers
+│   └── base_app.py     # Shared base class and settings
+├── .env                 # API token (gitignored)
 ├── .env.example
-├── menu.py            # macOS menu bar launcher
-├── LyricsBrowser.spec # PyInstaller spec (Windows)
+├── menu.py              # macOS menu bar launcher
+├── LyricsBrowser.spec   # PyInstaller spec (Windows)
+├── LyricsBrowser-macOS.spec # PyInstaller spec (macOS)
 └── requirements.txt
 ```
 
@@ -77,5 +85,14 @@ pyinstaller LyricsBrowser.spec
 ```
 
 Produces a single `dist/LyricsBrowser.exe`. If a `.env` file exists in the project directory at build time it is bundled into the executable; otherwise set `GENIUS_TOKEN` as an environment variable at runtime.
+
+## macOS Build
+
+```sh
+pip install pyinstaller
+pyinstaller LyricsBrowser-macOS.spec
+```
+
+Produces `dist/LyricsBrowser.app`.
 
 The catalog and settings files are always read from and written to the directory containing the executable.

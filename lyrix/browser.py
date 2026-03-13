@@ -482,7 +482,11 @@ class LyricsBrowser(LyricsBaseApp):
             try:
                 for item in ss.tracks:
                     num, track = item if isinstance(item, tuple) else (None, item)
-                    track_num = num if isinstance(num, int) else (getattr(track, "number", 0) or 0)
+                    track_num = (
+                        num
+                        if isinstance(num, int)
+                        else (getattr(track, "number", 0) or 0)
+                    )
                     self.catalog.add(
                         artist_name,
                         track.title,
@@ -535,7 +539,11 @@ class LyricsBrowser(LyricsBaseApp):
                             num, track = (
                                 item if isinstance(item, tuple) else (None, item)
                             )
-                            track_num = num if isinstance(num, int) else (getattr(track, "number", 0) or 0)
+                            track_num = (
+                                num
+                                if isinstance(num, int)
+                                else (getattr(track, "number", 0) or 0)
+                            )
                             self.catalog.add(
                                 a_name,
                                 track.title,
@@ -823,11 +831,21 @@ class LyricsBrowser(LyricsBaseApp):
             (_read_mp3_tags(p)[1] or "").strip().lower() for p in mp3s if p.exists()
         }
         matched_tracks: list[tuple[int | None, object]] = []
+        matched_mp3_titles: set[str] = set()
         for item in ss.tracks:
             num, track = item if isinstance(item, tuple) else (None, item)
-            if track.title.strip().lower() in wanted_titles:
-                resolved_num = num if isinstance(num, int) else (getattr(track, "number", None) or None)
-                matched_tracks.append((resolved_num, track))
+            track_title_lower = track.title.strip().lower()
+            # Match exact title or if track title contains the wanted title (e.g., "Ruins" in "In Their Darkened Shrines: IV. Ruins")
+            for wanted in wanted_titles:
+                if wanted in track_title_lower or track_title_lower in {wanted}:
+                    resolved_num = (
+                        num
+                        if isinstance(num, int)
+                        else (getattr(track, "number", None) or None)
+                    )
+                    matched_tracks.append((resolved_num, track))
+                    matched_mp3_titles.add(wanted)
+                    break
 
         # If we couldn't confidently match most of the folder, let caller fall back to per-file.
         if len(matched_tracks) < max(1, int(0.6 * len(mp3s))):
@@ -860,7 +878,8 @@ class LyricsBrowser(LyricsBaseApp):
         added = len(matched_tracks)
         skipped = 0  # unmatched files are retried individually by the caller
         failed = 0  # Only count genuine API failures here; fallbacks handle misses.
-        matched_titles = {t.title.strip().lower() for _, t in matched_tracks}
+        # Store MP3 titles that were matched (for fallback loop to check against)
+        matched_titles = matched_mp3_titles
         return added, skipped, failed, matched_titles
 
     def _on_scan_done(self, added, skipped, failed, total):
