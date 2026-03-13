@@ -16,6 +16,7 @@ try:
         _detect_album,
         _extract_name,
         _read_mp3_tags,
+        _read_mp3_track_num,
         _release_year,
         get_resource_path,
     )
@@ -34,6 +35,7 @@ except ImportError:
         _detect_album,
         _extract_name,
         _read_mp3_tags,
+        _read_mp3_track_num,
         _release_year,
         get_resource_path,
     )
@@ -480,7 +482,7 @@ class LyricsBrowser(LyricsBaseApp):
             try:
                 for item in ss.tracks:
                     num, track = item if isinstance(item, tuple) else (None, item)
-                    track_num = num if isinstance(num, int) else 0
+                    track_num = num if isinstance(num, int) else (getattr(track, "number", 0) or 0)
                     self.catalog.add(
                         artist_name,
                         track.title,
@@ -533,7 +535,7 @@ class LyricsBrowser(LyricsBaseApp):
                             num, track = (
                                 item if isinstance(item, tuple) else (None, item)
                             )
-                            track_num = num if isinstance(num, int) else 0
+                            track_num = num if isinstance(num, int) else (getattr(track, "number", 0) or 0)
                             self.catalog.add(
                                 a_name,
                                 track.title,
@@ -716,6 +718,7 @@ class LyricsBrowser(LyricsBaseApp):
                                 ss_album.get("name", album),
                                 _release_year(ss_album),
                                 ss.to_text(),
+                                track=_read_mp3_track_num(path),
                             )
                             added += 1
                         else:
@@ -736,7 +739,6 @@ class LyricsBrowser(LyricsBaseApp):
                 for path in unmatched:
                     if self._closing:
                         break
-                    done += 1
                     artist, title, album = _read_mp3_tags(path)
                     if not artist or not title:
                         skipped += 1
@@ -764,6 +766,7 @@ class LyricsBrowser(LyricsBaseApp):
                             ss_album.get("name", album),
                             _release_year(ss_album),
                             ss.to_text(),
+                            track=_read_mp3_track_num(path),
                         )
                         added += 1
                     else:
@@ -798,6 +801,7 @@ class LyricsBrowser(LyricsBaseApp):
                             ss_album.get("name", album),
                             _release_year(ss_album),
                             ss.to_text(),
+                            track=_read_mp3_track_num(path),
                         )
                         added += 1
                     else:
@@ -822,11 +826,12 @@ class LyricsBrowser(LyricsBaseApp):
         for item in ss.tracks:
             num, track = item if isinstance(item, tuple) else (None, item)
             if track.title.strip().lower() in wanted_titles:
-                matched_tracks.append((num if isinstance(num, int) else None, track))
+                resolved_num = num if isinstance(num, int) else (getattr(track, "number", None) or None)
+                matched_tracks.append((resolved_num, track))
 
         # If we couldn't confidently match most of the folder, let caller fall back to per-file.
         if len(matched_tracks) < max(1, int(0.6 * len(mp3s))):
-            return 0, 0, len(mp3s)
+            return 0, 0, len(mp3s), set()
 
         artist_name = _extract_name(getattr(ss, "artist", None), artist)
         album_name = getattr(ss, "name", "").strip() or album
@@ -843,7 +848,7 @@ class LyricsBrowser(LyricsBaseApp):
 
         for num, track in matched_tracks:
             track_num = num if isinstance(num, int) else 0
-            self.catalog.add(
+            self.catalog.add(  # num already resolved above; 0 means unknown
                 artist_name,
                 track.title,
                 album_name,

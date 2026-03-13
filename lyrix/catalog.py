@@ -7,9 +7,7 @@ from threading import Lock
 
 ENV_ABS_PATH = Path(__file__).parent.parent  # project root
 _FROZEN = getattr(sys, "frozen", False)
-CATALOG_PATH = (
-    Path(sys.executable).parent if _FROZEN else ENV_ABS_PATH
-) / "lyrics_catalog.json"
+CATALOG_PATH = Path.home() / ".lyrix" / "lyrics_catalog.json"
 SEPARATOR = "=" * 40
 FONT_NAME = "Roboto Mono for Powerline"
 
@@ -79,6 +77,21 @@ def _read_mp3_tags(path: Path) -> tuple[str, str, str]:
     return "", stem, ""
 
 
+def _read_mp3_track_num(path: Path) -> int:
+    """Return the track number from the TRCK ID3 tag, or 0 if unavailable."""
+    try:
+        from mutagen.mp3 import MP3
+
+        audio = MP3(str(path))
+        if audio.tags:
+            v = audio.tags.get("TRCK")
+            if v and v.text:
+                return int(str(v.text[0]).split("/")[0].strip())
+    except Exception:
+        pass
+    return 0
+
+
 def _detect_album(mp3s: list) -> tuple[str, str] | None:
     """Return (artist, album) if ≥70% of files share the same album tag, else None."""
     tags = [_read_mp3_tags(p) for p in mp3s]
@@ -124,6 +137,7 @@ class Catalog:
         )
         tmp = self._path.with_suffix(".tmp")
         try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
             tmp.write_text(content, encoding="utf-8")
             tmp.replace(self._path)
         except Exception:

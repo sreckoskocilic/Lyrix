@@ -17,9 +17,7 @@ except ImportError:
         sys.path.insert(0, parent)
     from catalog import ENV_ABS_PATH, FONT_NAME, _FROZEN, get_resource_path  # type: ignore
 
-_WRITABLE_DIR = Path(sys.executable).parent if _FROZEN else ENV_ABS_PATH
-_SETTINGS_PATH = _WRITABLE_DIR / "settings.json"
-
+_SETTINGS_PATH = Path.home() / ".lyrix" / "settings.json"
 
 def _year_sort(year_str: str) -> int:
     """Convert a year string to a sort key. Unknown/missing years sort last."""
@@ -134,6 +132,7 @@ class LyricsBaseApp:
 
     def _write_settings(self, data: dict):
         try:
+            _SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
             _SETTINGS_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
         except Exception:
             pass
