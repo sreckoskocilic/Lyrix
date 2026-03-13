@@ -6,18 +6,37 @@ import tkinter.scrolledtext as st
 from pathlib import Path
 from tkinter import ttk
 
-from .base_app import LyricsBaseApp, _year_sort
-from .catalog import (
-    Catalog,
-    CATALOG_PATH,
-    FONT_NAME,
-    SEPARATOR,
-    _detect_album,
-    _extract_name,
-    _read_mp3_tags,
-    _release_year,
-    get_resource_path,
-)
+try:
+    from .base_app import LyricsBaseApp, _year_sort
+    from .catalog import (
+        Catalog,
+        CATALOG_PATH,
+        FONT_NAME,
+        SEPARATOR,
+        _detect_album,
+        _extract_name,
+        _read_mp3_tags,
+        _release_year,
+        get_resource_path,
+    )
+except ImportError:
+    # Allow running as a script: python lyrix/browser.py
+    import pathlib
+    import sys
+
+    sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
+    from base_app import LyricsBaseApp, _year_sort  # type: ignore
+    from catalog import (  # type: ignore
+        Catalog,
+        CATALOG_PATH,
+        FONT_NAME,
+        SEPARATOR,
+        _detect_album,
+        _extract_name,
+        _read_mp3_tags,
+        _release_year,
+        get_resource_path,
+    )
 
 
 def _year_from_folder(name: str) -> str:
@@ -658,17 +677,97 @@ class LyricsBrowser(LyricsBaseApp):
                     f"Scanning {done + 1}/{total} — album: {artist} – {album}",
                 )
                 try:
-                    a, s, f = self._scan_album_dir(
+                    a, s, f, matched_titles = self._scan_album_dir(
                         artist, album, mp3s, folder_year=folder_year
                     )
                 except Exception:
-                    failed += len(mp3s)
-                    done += len(mp3s)
+                    a = s = 0
+                    f = len(mp3s)
+                    matched_titles = set()
+
+                # If album-level match failed, fall back to per-file lookups
+                if a == 0 and f == len(mp3s):
+                    for path in mp3s:
+                        if self._closing:
+                            break
+                        done += 1
+                        artist, title, album = _read_mp3_tags(path)
+                        if not artist or not title:
+                            skipped += 1
+                            self._ui(
+                                self._set_status,
+                                f"Scanning {done}/{total} — skipped: {path.name}",
+                            )
+                            continue
+                        self._ui(
+                            self._set_status,
+                            f"Scanning {done}/{total} — {artist} – {title}",
+                        )
+                        try:
+                            ss = self.genius.search_song(title, artist)
+                        except Exception:
+                            failed += 1
+                            continue
+                        if ss:
+                            ss_album = getattr(ss, "album", {}) or {}
+                            self.catalog.add(
+                                ss.artist,
+                                ss.title,
+                                ss_album.get("name", album),
+                                _release_year(ss_album),
+                                ss.to_text(),
+                            )
+                            added += 1
+                        else:
+                            failed += 1
                     continue
+
                 added += a
                 skipped += s
                 failed += f
                 done += len(mp3s)
+
+                # Retry unmatched tracks individually to recover anything the album match missed.
+                unmatched: list[Path] = []
+                for p in mp3s:
+                    title = (_read_mp3_tags(p)[1] or "").strip().lower()
+                    if title not in matched_titles:
+                        unmatched.append(p)
+                for path in unmatched:
+                    if self._closing:
+                        break
+                    done += 1
+                    artist, title, album = _read_mp3_tags(path)
+                    if not artist or not title:
+                        skipped += 1
+                        self._ui(
+                            self._set_status,
+                            f"Scanning {done}/{total} — skipped: {path.name}",
+                        )
+                        continue
+                    self._ui(
+                        self._set_status,
+                        f"Scanning {done}/{total} — {artist} – {title}",
+                    )
+                    try:
+                        ss = self.genius.search_song(title, artist)
+                    except Exception:
+                        failed += 1
+                        continue
+                    if ss:
+                        ss_album = getattr(ss, "album", {}) or {}
+                        artist_name = getattr(ss, "artist", artist)
+                        title_name = getattr(ss, "title", title)
+                        self.catalog.add(
+                            artist_name,
+                            title_name,
+                            ss_album.get("name", album),
+                            _release_year(ss_album),
+                            ss.to_text(),
+                        )
+                        added += 1
+                    else:
+                        failed += 1
             else:
                 for path in mp3s:
                     if self._closing:
@@ -707,13 +806,28 @@ class LyricsBrowser(LyricsBaseApp):
 
     def _scan_album_dir(
         self, artist: str, album: str, mp3s: list, folder_year: str = ""
-    ) -> tuple[int, int, int]:
+    ) -> tuple[int, int, int, set[str]]:
         try:
             ss = self.genius.search_album(album, artist)
         except Exception:
-            return 0, 0, len(mp3s)
+            return 0, 0, len(mp3s), set()
         if not ss or not ss.tracks:
+            return 0, 0, len(mp3s), set()
+
+        # Only keep tracks that correspond to the files we found; otherwise fall back.
+        wanted_titles = {
+            (_read_mp3_tags(p)[1] or "").strip().lower() for p in mp3s if p.exists()
+        }
+        matched_tracks: list[tuple[int | None, object]] = []
+        for item in ss.tracks:
+            num, track = item if isinstance(item, tuple) else (None, item)
+            if track.title.strip().lower() in wanted_titles:
+                matched_tracks.append((num if isinstance(num, int) else None, track))
+
+        # If we couldn't confidently match most of the folder, let caller fall back to per-file.
+        if len(matched_tracks) < max(1, int(0.6 * len(mp3s))):
             return 0, 0, len(mp3s)
+
         artist_name = _extract_name(getattr(ss, "artist", None), artist)
         album_name = getattr(ss, "name", "").strip() or album
         album_year = (
@@ -726,8 +840,8 @@ class LyricsBrowser(LyricsBaseApp):
             )
             or folder_year
         )
-        for item in ss.tracks:
-            num, track = item if isinstance(item, tuple) else (None, item)
+
+        for num, track in matched_tracks:
             track_num = num if isinstance(num, int) else 0
             self.catalog.add(
                 artist_name,
@@ -737,8 +851,12 @@ class LyricsBrowser(LyricsBaseApp):
                 track.to_text(),
                 track=track_num,
             )
-        added = len(ss.tracks)
-        return added, max(0, len(mp3s) - added), 0
+
+        added = len(matched_tracks)
+        skipped = 0  # unmatched files are retried individually by the caller
+        failed = 0  # Only count genuine API failures here; fallbacks handle misses.
+        matched_titles = {t.title.strip().lower() for _, t in matched_tracks}
+        return added, skipped, failed, matched_titles
 
     def _on_scan_done(self, added, skipped, failed, total):
         self._set_busy(False)

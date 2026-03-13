@@ -3,6 +3,7 @@ import sys
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
+from threading import Lock
 
 ENV_ABS_PATH = Path(__file__).parent.parent  # project root
 _FROZEN = getattr(sys, "frozen", False)
@@ -82,7 +83,7 @@ def _detect_album(mp3s: list) -> tuple[str, str] | None:
     """Return (artist, album) if ≥70% of files share the same album tag, else None."""
     tags = [_read_mp3_tags(p) for p in mp3s]
     valid = [(a, al) for a, _, al in tags if a and al]
-    if not valid or len(valid) < max(2, len(mp3s) * 0.6):
+    if not valid or len(valid) < max(2, len(mp3s) * 0.7):
         return None
     album_counts = Counter(al.lower() for _, al in valid)
     top_album, top_count = album_counts.most_common(1)[0]
@@ -106,6 +107,7 @@ class Catalog:
     def __init__(self, path: Path = CATALOG_PATH):
         self._path = path
         self._data: dict = {}
+        self._lock = Lock()
         self._load()
 
     def _load(self):
@@ -144,68 +146,76 @@ class Catalog:
         lyrics: str,
         track: int = 0,
     ):
-        self._data[self._key(artist, title)] = {
-            "artist": artist,
-            "title": title,
-            "album": album or "",
-            "year": year or "",
-            "track": track,  # track number within album; 0 = unknown
-            "lyrics": lyrics,
-            "added": datetime.now().isoformat(timespec="seconds"),
-        }
-        self._save()
+        with self._lock:
+            self._data[self._key(artist, title)] = {
+                "artist": artist,
+                "title": title,
+                "album": album or "",
+                "year": year or "",
+                "track": track,  # track number within album; 0 = unknown
+                "lyrics": lyrics,
+                "added": datetime.now().isoformat(timespec="seconds"),
+            }
+            self._save()
 
     def get(self, artist: str, title: str):
-        return self._data.get(self._key(artist, title))
+        with self._lock:
+            return self._data.get(self._key(artist, title))
 
     def remove(self, artist: str, title: str):
         key = self._key(artist, title)
-        if key in self._data:
-            del self._data[key]
-            self._save()
+        with self._lock:
+            if key in self._data:
+                del self._data[key]
+                self._save()
 
     def remove_entries(self, pairs: list) -> int:
         """Remove multiple (artist, title) pairs in a single save."""
         removed = 0
-        for artist, title in pairs:
-            key = self._key(artist, title)
-            if key in self._data:
-                del self._data[key]
-                removed += 1
-        if removed:
-            self._save()
+        with self._lock:
+            for artist, title in pairs:
+                key = self._key(artist, title)
+                if key in self._data:
+                    del self._data[key]
+                    removed += 1
+            if removed:
+                self._save()
         return removed
 
     def remove_artist(self, artist: str) -> int:
-        keys = [
-            k
-            for k, v in self._data.items()
-            if v["artist"].lower().strip() == artist.lower().strip()
-        ]
-        for k in keys:
-            del self._data[k]
-        if keys:
-            self._save()
-        return len(keys)
+        with self._lock:
+            keys = [
+                k
+                for k, v in self._data.items()
+                if v["artist"].lower().strip() == artist.lower().strip()
+            ]
+            for k in keys:
+                del self._data[k]
+            if keys:
+                self._save()
+            return len(keys)
 
     def set_album_year(self, artist: str, album: str, year: str) -> int:
         """Set year on all songs for (artist, album). Returns count updated."""
         updated = 0
         al = artist.lower().strip()
         alb = album.lower().strip()
-        for entry in self._data.values():
-            if (
-                entry["artist"].lower().strip() == al
-                and (entry.get("album") or "").lower().strip() == alb
-            ):
-                entry["year"] = year
-                updated += 1
-        if updated:
-            self._save()
+        with self._lock:
+            for entry in self._data.values():
+                if (
+                    entry["artist"].lower().strip() == al
+                    and (entry.get("album") or "").lower().strip() == alb
+                ):
+                    entry["year"] = year
+                    updated += 1
+            if updated:
+                self._save()
         return updated
 
     def all_entries(self):
-        return list(self._data.values())
+        with self._lock:
+            return list(self._data.values())
 
     def __len__(self):
-        return len(self._data)
+        with self._lock:
+            return len(self._data)

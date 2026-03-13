@@ -7,18 +7,37 @@ import tkinter.scrolledtext as st
 from pathlib import Path
 from tkinter import ttk
 
-from .base_app import LyricsBaseApp
-from .catalog import (
-    Catalog,
-    CATALOG_PATH,
-    FONT_NAME,
-    SEPARATOR,
-    _extract_name,
-    _format_track,
-    _release_year,
-    _song_header,
-    get_resource_path,
-)
+try:
+    from .base_app import LyricsBaseApp
+    from .catalog import (
+        Catalog,
+        CATALOG_PATH,
+        FONT_NAME,
+        SEPARATOR,
+        _extract_name,
+        _format_track,
+        _release_year,
+        _song_header,
+        get_resource_path,
+    )
+except ImportError:
+    # Allow running as a script: python lyrix/search.py
+    import pathlib
+    import sys
+
+    sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
+    from base_app import LyricsBaseApp  # type: ignore
+    from catalog import (  # type: ignore
+        Catalog,
+        CATALOG_PATH,
+        FONT_NAME,
+        SEPARATOR,
+        _extract_name,
+        _format_track,
+        _release_year,
+        _song_header,
+        get_resource_path,
+    )
 
 
 class LyricsApp(LyricsBaseApp):

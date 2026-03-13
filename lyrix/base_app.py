@@ -5,7 +5,17 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
 
-from .catalog import ENV_ABS_PATH, FONT_NAME, _FROZEN, get_resource_path
+try:
+    from .catalog import ENV_ABS_PATH, FONT_NAME, _FROZEN, get_resource_path
+except ImportError:
+    # Allow running as a script (module executed directly)
+    import pathlib
+    import sys
+
+    parent = str(pathlib.Path(__file__).resolve().parent.parent)
+    if parent not in sys.path:
+        sys.path.insert(0, parent)
+    from catalog import ENV_ABS_PATH, FONT_NAME, _FROZEN, get_resource_path  # type: ignore
 
 _WRITABLE_DIR = Path(sys.executable).parent if _FROZEN else ENV_ABS_PATH
 _SETTINGS_PATH = _WRITABLE_DIR / "settings.json"
