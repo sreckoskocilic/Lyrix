@@ -134,6 +134,13 @@ class CatalogTests(unittest.TestCase):
             cat = Catalog(cat_path)
             self.assertEqual(len(cat), 1)
 
+    def test_add_many_empty_list_is_noop(self):
+        with TemporaryDirectory() as tmp:
+            cat_path = Path(tmp) / "catalog.json"
+            cat = Catalog(cat_path)
+            cat.add_many([])
+            self.assertEqual(len(cat), 0)
+
     def test_save_cleans_up_on_failure(self):
         with TemporaryDirectory() as tmp:
             cat_path = Path(tmp) / "catalog.json"

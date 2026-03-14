@@ -7,7 +7,7 @@ import tkinter as tk
 from tkinter import ttk
 
 try:
-    from .catalog import ENV_ABS_PATH, FONT_NAME, get_resource_path
+    from .catalog import ENV_ABS_PATH, FONT_NAME, _BASE_DIR, get_resource_path
 except ImportError:
     # Allow running as a script (module executed directly)
     import pathlib
@@ -16,14 +16,7 @@ except ImportError:
     parent = str(pathlib.Path(__file__).resolve().parent.parent)
     if parent not in sys.path:
         sys.path.insert(0, parent)
-    from catalog import ENV_ABS_PATH, FONT_NAME, get_resource_path  # type: ignore
-
-if sys.platform == "win32":
-    _BASE_DIR = (
-        Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")) / "Lyrix"
-    )
-else:
-    _BASE_DIR = Path.home() / ".lyrix"
+    from catalog import ENV_ABS_PATH, FONT_NAME, _BASE_DIR, get_resource_path  # type: ignore
 
 _SETTINGS_PATH = _BASE_DIR / "settings.json"
 LOG_PATH = _BASE_DIR / "lyrix.log"
@@ -40,9 +33,6 @@ def _setup_logging():
             logging.StreamHandler(),
         ],
     )
-
-
-_setup_logging()
 
 
 def _year_sort(year_str: str) -> int:
@@ -62,6 +52,7 @@ class LyricsBaseApp:
     BTN_ACTIVE = "#585b70"
 
     def __init__(self, master):
+        _setup_logging()
         self.master = master
         self.master.configure(bg=self.BG)
         self._busy = False
@@ -157,26 +148,35 @@ class LyricsBaseApp:
             return {}
 
     def _write_settings(self, data: dict):
+        content = json.dumps(data, indent=2)
+        tmp = _SETTINGS_PATH.with_suffix(".tmp")
         try:
             _SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
-            _SETTINGS_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            tmp.write_text(content, encoding="utf-8")
+            tmp.replace(_SETTINGS_PATH)
         except Exception:
-            pass
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
 
-    def _restore_geometry(self, default: str = ""):
-        geom = self._read_settings().get("geometry", {}).get(type(self).__name__, "")
+    def _restore_geometry(self, default: str = "", settings: dict | None = None):
+        if settings is None:
+            settings = self._read_settings()
+        geom = settings.get("geometry", {}).get(type(self).__name__, "")
         self.master.geometry(geom if geom else default)
 
-    def _save_geometry(self):
-        data = self._read_settings()
+    def _collect_settings(self, data: dict) -> dict:
+        """Populate data with this app's persistent state. Override to add more."""
         data.setdefault("geometry", {})[type(self).__name__] = self.master.geometry()
-        self._write_settings(data)
+        return data
 
     # ── Close ─────────────────────────────────────────────────────────────────
 
     def _on_close(self):
         self._closing = True
-        self._save_geometry()
+        data = self._collect_settings(self._read_settings())
+        self._write_settings(data)
         if self._status_after_id is not None:
             self.master.after_cancel(self._status_after_id)
         self.master.destroy()

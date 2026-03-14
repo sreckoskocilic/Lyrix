@@ -7,6 +7,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+if sys.platform != "darwin":
+    print("menu.py is macOS-only (requires rumps)", file=sys.stderr)
+    sys.exit(1)
+
 try:
     import rumps
 except ImportError:

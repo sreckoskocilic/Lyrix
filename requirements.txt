@@ -3,4 +3,3 @@ mutagen
 python-dotenv
 pyglet
 rumps; sys_platform == "darwin"
-pyinstaller

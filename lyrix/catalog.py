@@ -28,11 +28,20 @@ def get_resource_path(relative_path):
     return (Path(base_path) if base_path else ENV_ABS_PATH) / relative_path
 
 
-def _release_year(album_data):
-    release_date = (album_data or {}).get("release_date_for_display", "")
+def _release_year(album_data) -> str:
+    """Extract a 4-digit year string from a Genius album dict or object."""
+    if album_data is None:
+        return ""
+    if isinstance(album_data, dict):
+        release_date = album_data.get("release_date_for_display", "") or ""
+    else:
+        release_date = getattr(album_data, "release_date_for_display", "") or ""
     if not release_date:
         return ""
-    for fmt in ("%B %d, %Y", "%B %Y", "%Y"):
+    # Fast-path: plain 4-digit year (most common case)
+    if len(release_date) == 4 and release_date.isdigit():
+        return release_date
+    for fmt in ("%B %d, %Y", "%B %Y"):
         try:
             return str(datetime.strptime(release_date, fmt).year)
         except ValueError:
@@ -60,14 +69,19 @@ def _extract_name(obj, fallback="Unknown"):
     return getattr(obj, "name", None) or fallback
 
 
+def _unpack_track(item):
+    """Return (track_num_or_None, track_obj) from a (num, track) tuple or bare track."""
+    return item if isinstance(item, tuple) else (None, item)
+
+
 def _format_track(item):
-    num, track = item if isinstance(item, tuple) else (None, item)
+    num, track = _unpack_track(item)
     prefix = f"{num}. " if num is not None else ""
     return f"{SEPARATOR}\n{prefix}{track.title}\n{SEPARATOR}\n{track.to_text()}\n\n\n"
 
 
-def _read_mp3_tags(path: Path) -> tuple[str, str, str]:
-    """Return (artist, title, album) from ID3 tags, falling back to filename parsing."""
+def _read_mp3_info(path: Path) -> tuple[str, str, str, int]:
+    """Return (artist, title, album, track_num) from ID3 tags in a single parse."""
     try:
         from mutagen.mp3 import MP3
 
@@ -78,34 +92,45 @@ def _read_mp3_tags(path: Path) -> tuple[str, str, str]:
                 v = audio.tags.get(key)
                 return str(v.text[0]).strip() if v and v.text else ""
 
-            return tag("TPE1") or tag("TPE2"), tag("TIT2"), tag("TALB")
+            artist = tag("TPE1") or tag("TPE2")
+            title = tag("TIT2")
+            album = tag("TALB")
+            trck = audio.tags.get("TRCK")
+            track_num = 0
+            if trck and trck.text:
+                try:
+                    track_num = int(str(trck.text[0]).split("/")[0].strip())
+                except (ValueError, IndexError):
+                    pass
+            return artist, title, album, track_num
     except Exception:
         pass
     stem = path.stem
     if " - " in stem:
         parts = stem.split(" - ", 1)
-        return parts[0].strip(), parts[1].strip(), ""
-    return "", stem, ""
+        return parts[0].strip(), parts[1].strip(), "", 0
+    return "", stem, "", 0
+
+
+def _read_mp3_tags(path: Path) -> tuple[str, str, str]:
+    """Return (artist, title, album) from ID3 tags, falling back to filename parsing."""
+    info = _read_mp3_info(path)
+    return info[0], info[1], info[2]
 
 
 def _read_mp3_track_num(path: Path) -> int:
     """Return the track number from the TRCK ID3 tag, or 0 if unavailable."""
-    try:
-        from mutagen.mp3 import MP3
-
-        audio = MP3(str(path))
-        if audio.tags:
-            v = audio.tags.get("TRCK")
-            if v and v.text:
-                return int(str(v.text[0]).split("/")[0].strip())
-    except Exception:
-        pass
-    return 0
+    return _read_mp3_info(path)[3]
 
 
-def _detect_album(mp3s: list) -> tuple[str, str] | None:
+def _detect_album(
+    mp3s: list, tag_cache: dict | None = None
+) -> tuple[str, str] | None:
     """Return (artist, album) if ≥70% of files share the same album tag, else None."""
-    tags = [_read_mp3_tags(p) for p in mp3s]
+    if tag_cache is not None:
+        tags = [(tag_cache[p][0], tag_cache[p][1], tag_cache[p][2]) for p in mp3s]
+    else:
+        tags = [_read_mp3_tags(p) for p in mp3s]
     valid = [(a, al) for a, _, al in tags if a and al]
     if not valid or len(valid) < max(2, len(mp3s) * 0.7):
         return None
@@ -114,13 +139,21 @@ def _detect_album(mp3s: list) -> tuple[str, str] | None:
     top_album, top_count = album_counts.most_common(1)[0]
     if top_count / len(valid) < 0.7:
         return None
-    matching = [(a_l, a) for a_l, al_l, a, _ in valid_lower if al_l == top_album]
+    # Build matching list and capture album_name in one pass (avoids a third pass via next())
+    matching = []
+    album_name = None
+    name_map: dict[str, str] = {}
+    for a_l, al_l, a, al in valid_lower:
+        if al_l == top_album:
+            matching.append((a_l, a))
+            name_map.setdefault(a_l, a)
+            if album_name is None:
+                album_name = al
     if not matching:
         return None  # pragma: no cover - defensive check, nearly impossible to trigger
-    artist_counts = Counter(a_l for a_l, a in matching)
+    artist_counts = Counter(a_l for a_l, _ in matching)
     top_artist = artist_counts.most_common(1)[0][0]
-    album_name = next(al for _, al_l, _, al in valid_lower if al_l == top_album)
-    artist_name = next(a for a_l, a in matching if a_l == top_artist)
+    artist_name = name_map[top_artist]
     return artist_name, album_name
 
 
@@ -198,6 +231,24 @@ class Catalog:
             }
             self._save()
 
+    def add_many(self, entries: list[dict]):
+        """Add multiple entries in a single save, avoiding per-track JSON writes."""
+        if not entries:
+            return
+        now = datetime.now().isoformat(timespec="seconds")
+        with self._lock:
+            for e in entries:
+                self._data[self._key(e["artist"], e["title"])] = {
+                    "artist": e["artist"],
+                    "title": e["title"],
+                    "album": e.get("album") or "",
+                    "year": e.get("year") or "",
+                    "track": e.get("track", 0),
+                    "lyrics": e["lyrics"],
+                    "added": now,
+                }
+            self._save()
+
     def get(self, artist: str, title: str):
         with self._lock:
             return self._data.get(self._key(artist, title))
@@ -223,11 +274,12 @@ class Catalog:
         return removed
 
     def remove_artist(self, artist: str) -> int:
+        artist_lower = artist.lower().strip()
         with self._lock:
             keys = [
                 k
                 for k, v in self._data.items()
-                if v["artist"].lower().strip() == artist.lower().strip()
+                if v["artist"].lower().strip() == artist_lower
             ]
             for k in keys:
                 del self._data[k]

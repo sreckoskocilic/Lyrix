@@ -15,9 +15,9 @@ try:
         FONT_NAME,
         SEPARATOR,
         _extract_name,
-        _format_track,
         _release_year,
         _song_header,
+        _unpack_track,
         get_resource_path,
     )
 except ImportError:
@@ -33,9 +33,9 @@ except ImportError:
         FONT_NAME,
         SEPARATOR,
         _extract_name,
-        _format_track,
         _release_year,
         _song_header,
+        _unpack_track,
         get_resource_path,
     )
 
@@ -233,25 +233,33 @@ class LyricsApp(LyricsBaseApp):
     def _render_album(self, ss):
         artist_name = _extract_name(getattr(ss, "artist", None), "Unknown artist")
         album_name = getattr(ss, "name", "").strip() or "Unknown album"
-        album_year = _release_year(
-            {"release_date_for_display": getattr(ss, "release_date_for_display", "")}
-        )
+        album_year = _release_year(ss)
         header = (
             f"{SEPARATOR}\nArtist: {artist_name}\nAlbum: {album_name}\n{SEPARATOR}\n\n"
         )
-        tracks_text = "".join(_format_track(item) for item in ss.tracks)
-        self._set_output(header + tracks_text)
+        # Single pass: build display text and catalog entries, calling to_text() once each
+        tracks_text_parts = []
+        entries_to_add = []
         for item in ss.tracks:
-            num, track = item if isinstance(item, tuple) else (None, item)
+            num, track = _unpack_track(item)
             track_num = num if isinstance(num, int) else 0
-            self.catalog.add(
-                artist_name,
-                track.title,
-                album_name,
-                album_year,
-                track.to_text(),
-                track=track_num,
+            lyrics = track.to_text()
+            prefix = f"{num}. " if num is not None else ""
+            tracks_text_parts.append(
+                f"{SEPARATOR}\n{prefix}{track.title}\n{SEPARATOR}\n{lyrics}\n\n\n"
             )
+            entries_to_add.append(
+                {
+                    "artist": artist_name,
+                    "title": track.title,
+                    "album": album_name,
+                    "year": album_year,
+                    "lyrics": lyrics,
+                    "track": track_num,
+                }
+            )
+        self._set_output(header + "".join(tracks_text_parts))
+        self.catalog.add_many(entries_to_add)
         self.default_filename = album_name
         self.master.title(f"{album_name} — Lyrics Search")
         self._set_status(f"Loaded: {album_name} ({len(ss.tracks)} tracks)")
