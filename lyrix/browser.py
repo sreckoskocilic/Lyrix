@@ -229,21 +229,21 @@ class LyricsBrowser(LyricsBaseApp):
         self._fill_years_btn = ttk.Button(
             btn_row2, text="Fill Years", width=13, command=self._fill_years
         )
-        self._fill_years_btn.pack(side="left", padx=(0, 4))
-        self._fetch_missing_btn = ttk.Button(
-            btn_row2, text="Fetch Missing", width=13, command=self._fetch_missing
-        )
-        self._fetch_missing_btn.pack(side="left")
+        self._fill_years_btn.pack(side="left")
 
-        # Buttons — row 3: remove / undo
+        # Buttons — row 3: remove / undo / fetch missing
         btn_row3 = ttk.Frame(frame)
         btn_row3.pack(fill="x")
         ttk.Button(
             btn_row3, text="Remove", width=13, command=self._remove_selected
         ).pack(side="left", padx=(0, 4))
         ttk.Button(btn_row3, text="Undo", width=13, command=self._undo_remove).pack(
-            side="left"
+            side="left", padx=(0, 4)
         )
+        self._fetch_missing_btn = ttk.Button(
+            btn_row3, text="Fetch Missing", width=13, command=self._fetch_missing
+        )
+        self._fetch_missing_btn.pack(side="left")
 
         # Buttons — row 4: export
         btn_row4 = ttk.Frame(frame)
