@@ -602,10 +602,12 @@ class LyricsBrowser(LyricsBaseApp):
         album_name = ss_album.get("name") or (existing or {}).get("album", "") or album
         year = _release_year(ss_album) or (existing or {}).get("year", "")
         track = (existing or {}).get("track", 0)
-        self.catalog.add(artist, title, album_name, year, ss.to_text(), track=track)
+        if ss.title != title:
+            self.catalog.remove(artist, title, album)
+        self.catalog.add(artist, ss.title, album_name, year, ss.to_text(), track=track)
         self._refresh_tree()
-        self._set_status(f"Updated: {title}", duration_ms=4000)
-        entry = self.catalog.get(artist, title, album_name)
+        self._set_status(f"Updated: {ss.title}", duration_ms=4000)
+        entry = self.catalog.get(artist, ss.title, album_name)
         if entry:
             self._current_entry = entry
             self._edit_btn.configure(state="normal")
@@ -705,7 +707,9 @@ class LyricsBrowser(LyricsBaseApp):
                     )
                     yr = _release_year(ss_album) or (existing or {}).get("year", "")
                     trk = (existing or {}).get("track", 0)
-                    self.catalog.add(a, t, alb, yr, ss.to_text(), track=trk)
+                    if ss.title != t:
+                        self.catalog.remove(a, t, album_name)
+                    self.catalog.add(a, ss.title, alb, yr, ss.to_text(), track=trk)
                     updated += 1
                 else:
                     failed += 1
@@ -794,62 +798,7 @@ class LyricsBrowser(LyricsBaseApp):
         self._ui(self._set_status, f"Reading tags for {len(mp3s)} file(s)…")
         tag_cache = {p: _read_mp3_info(p) for p in mp3s}
 
-        # Group by directory and process each album folder independently so that
-        # overlapping songs (e.g. Human Waste tracks re-released on Effigy) are
-        # handled correctly for each album without cross-album interference.
-        all_by_dir: dict[Path, list[Path]] = {}
-        for p in mp3s:
-            all_by_dir.setdefault(p.parent, []).append(p)
-
-        total_added = total_failed = total_skipped = 0
-        any_processed = False
-
-        for dir_path, dir_mp3s in all_by_dir.items():
-            if self._closing:
-                break
-            a, s, f, processed = self._run_scan_dir(dir_path, dir_mp3s, tag_cache)
-            total_added += a
-            total_skipped += s
-            total_failed += f
-            any_processed = any_processed or processed
-
-        if not any_processed:
-            self._ui(self._set_busy, False)
-            self._ui(mb.showinfo, "Scan", f"All {len(mp3s)} MP3s already have lyrics.")
-            return
-
-        self._ui(
-            self._on_scan_done, total_added, total_skipped, total_failed, len(mp3s)
-        )
-
-    def _run_scan_dir(
-        self, dir_path: Path, mp3s: list, tag_cache: dict
-    ) -> tuple[int, int, int, bool]:
-        """Scan one album directory independently. Returns (added, skipped, failed, did_work)."""
-        # Step 1: add placeholder entries for all mp3s missing album-specific lyrics.
-        placeholders = []
-        for p in mp3s:
-            artist, title, album, track_num = tag_cache[p]
-            if not artist or not title:
-                continue
-            entry = self.catalog.get(artist, title, album)
-            if not entry or not entry.get("lyrics", "").strip():
-                placeholders.append(
-                    {
-                        "artist": artist,
-                        "title": title,
-                        "album": album,
-                        "year": (entry or {}).get("year", ""),
-                        "lyrics": "",
-                        "track": track_num,
-                    }
-                )
-        if placeholders:
-            self.catalog.add_many(placeholders)
-            self._ui(self._refresh_tree)
-
-        # Step 2: which files in this directory still need lyrics?
-        need_lyrics = [
+        need = [
             p
             for p in mp3s
             if (a := tag_cache[p][0])
@@ -858,77 +807,62 @@ class LyricsBrowser(LyricsBaseApp):
             .get("lyrics", "")
             .strip()
         ]
-        if not need_lyrics:
-            return 0, 0, 0, False
+        if not need:
+            self._ui(self._set_busy, False)
+            self._ui(mb.showinfo, "Scan", f"All {len(mp3s)} MP3s already have lyrics.")
+            return
 
-        total = len(need_lyrics)
-        self._ui(self._set_status, f"Scanning {dir_path.name} — 0/{total}…")
+        by_dir: dict[Path, list[Path]] = {}
+        for p in need:
+            by_dir.setdefault(p.parent, []).append(p)
 
+        total = len(need)
+        self._ui(self._set_status, f"Scanning 0/{total}…")
         added = skipped = failed = done = 0
-        album_info = _detect_album(mp3s, tag_cache)
-        if album_info:
-            artist, album = album_info
-            folder_year = _year_from_folder(dir_path.name)
-            try:
-                a, s, f, matched_titles = self._scan_album_dir(
-                    artist,
-                    album,
-                    need_lyrics,
-                    folder_year=folder_year,
-                    tag_cache=tag_cache,
-                )
-            except Exception as exc:
-                logging.getLogger(__name__).warning(
-                    "Album scan failed for %s / %s: %s", artist, album, exc
-                )
-                a = s = 0
-                f = len(need_lyrics)
-                matched_titles = set()
 
-            if a == 0 and f == len(need_lyrics):
-                # Album-level match failed — fall back to per-file.
-                for path in need_lyrics:
-                    if self._closing:
-                        break
-                    done += 1
-                    a_, s_, f_ = self._fetch_and_add_single(
-                        path, tag_cache, done, total
+        for dir_path, dir_mp3s in by_dir.items():
+            if self._closing:
+                break
+            album_info = _detect_album(dir_mp3s, tag_cache)
+            if album_info:
+                artist, album = album_info
+                try:
+                    a, s, f, matched_titles = self._scan_album_dir(
+                        artist,
+                        album,
+                        dir_mp3s,
+                        folder_year=_year_from_folder(dir_path.name),
+                        tag_cache=tag_cache,
                     )
-                    added += a_
-                    skipped += s_
-                    failed += f_
-            else:
+                except Exception as exc:
+                    logging.getLogger(__name__).warning(
+                        "Album scan failed for %s / %s: %s", artist, album, exc
+                    )
+                    a = s = f = 0
+                    matched_titles = set()
+
                 added += a
                 skipped += s
                 failed += f
+                done += a + s
                 unmatched = [
                     p
-                    for p in need_lyrics
+                    for p in dir_mp3s
                     if (tag_cache[p][1] or "").strip().lower() not in matched_titles
                 ]
-                done += total - len(unmatched)
-                for path in unmatched:
-                    if self._closing:
-                        break
-                    done += 1
-                    a_, s_, f_ = self._fetch_and_add_single(
-                        path, tag_cache, done, total
-                    )
-                    added += a_
-                    skipped += s_
-                    failed += f_
-        else:
-            for path in need_lyrics:
+            else:
+                unmatched = dir_mp3s
+
+            for path in unmatched:
                 if self._closing:
                     break
                 done += 1
-                a_, s_, f_ = self._fetch_and_add_single(path, tag_cache, done, total)
-                added += a_
-                skipped += s_
-                failed += f_
+                a, s, f = self._fetch_and_add_single(path, tag_cache, done, total)
+                added += a
+                skipped += s
+                failed += f
 
-        self._ui(self._refresh_tree)
-        return added, skipped, failed, True
+        self._ui(self._on_scan_done, added, skipped, failed, len(mp3s))
 
     def _fetch_and_add_single(
         self, path: Path, tag_cache: dict, done: int, total: int
@@ -957,7 +891,7 @@ class LyricsBrowser(LyricsBaseApp):
             ss_album = getattr(ss, "album", {}) or {}
             self.catalog.add(
                 artist,
-                title,
+                ss.title,
                 album or ss_album.get("name", ""),
                 _release_year(ss_album),
                 ss.to_text(),
@@ -1280,9 +1214,11 @@ class LyricsBrowser(LyricsBaseApp):
                 continue
             if ss:
                 ss_album = getattr(ss, "album", {}) or {}
+                if ss.title != e["title"]:
+                    self.catalog.remove(e["artist"], e["title"], e.get("album", ""))
                 self.catalog.add(
                     e["artist"],
-                    e["title"],
+                    ss.title,
                     e.get("album") or ss_album.get("name", ""),
                     e.get("year") or _release_year(ss_album),
                     ss.to_text(),

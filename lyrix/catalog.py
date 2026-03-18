@@ -279,16 +279,7 @@ class Catalog:
 
     def get(self, artist: str, title: str, album: str = ""):
         with self._lock:
-            if album:
-                result = self._data.get(self._key(artist, title, album))
-                if result is not None:
-                    return result
-            # Fallback: find any entry matching artist\ttitle\t*
-            prefix = f"{artist.lower().strip()}\t{title.lower().strip()}\t"
-            for key, entry in self._data.items():
-                if key.startswith(prefix):
-                    return entry
-            return None
+            return self._data.get(self._key(artist, title, album))
 
     def remove(self, artist: str, title: str, album: str = ""):
         with self._lock:

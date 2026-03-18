@@ -65,7 +65,7 @@ class CatalogTests(unittest.TestCase):
             cat = Catalog(cat_path)
             cat.add("A", "Song", "Album", "2020", "lyrics", track=1)
             self.assertEqual(len(cat), 1)
-            entry = cat.get("A", "Song")
+            entry = cat.get("A", "Song", "Album")
             self.assertIsNotNone(entry)
             self.assertEqual(entry["track"], 1)
             cat.remove("A", "Song")
@@ -80,7 +80,7 @@ class CatalogTests(unittest.TestCase):
             cat.add("B", "Other", "Other", "", "lyrics")
             updated = cat.set_album_year("A", "Album", "1999")
             self.assertEqual(updated, 2)
-            entry = cat.get("A", "One")
+            entry = cat.get("A", "One", "Album")
             self.assertEqual(entry["year"], "1999")
             removed = cat.remove_entries([("A", "One"), ("A", "Two")])
             self.assertEqual(removed, 2)
@@ -208,18 +208,18 @@ class CatalogTests(unittest.TestCase):
             cat_path = Path(tmp) / "catalog.json"
             cat = Catalog(cat_path)
             cat.add("A", "Song", "Album", "2020", "original lyrics")
-            original_added = cat.get("A", "Song")["added"]
+            original_added = cat.get("A", "Song", "Album")["added"]
 
             cat.add("A", "Song", "Album", "2020", "updated lyrics")
-            self.assertEqual(cat.get("A", "Song")["added"], original_added)
-            self.assertEqual(cat.get("A", "Song")["lyrics"], "updated lyrics")
+            self.assertEqual(cat.get("A", "Song", "Album")["added"], original_added)
+            self.assertEqual(cat.get("A", "Song", "Album")["lyrics"], "updated lyrics")
 
     def test_add_many_preserves_added_timestamp_on_update(self):
         with TemporaryDirectory() as tmp:
             cat_path = Path(tmp) / "catalog.json"
             cat = Catalog(cat_path)
             cat.add("A", "Song", "Album", "2020", "original lyrics")
-            original_added = cat.get("A", "Song")["added"]
+            original_added = cat.get("A", "Song", "Album")["added"]
 
             cat.add_many(
                 [
@@ -233,8 +233,8 @@ class CatalogTests(unittest.TestCase):
                     }
                 ]
             )
-            self.assertEqual(cat.get("A", "Song")["added"], original_added)
-            self.assertEqual(cat.get("A", "Song")["lyrics"], "updated lyrics")
+            self.assertEqual(cat.get("A", "Song", "Album")["added"], original_added)
+            self.assertEqual(cat.get("A", "Song", "Album")["lyrics"], "updated lyrics")
 
     def test_same_song_different_albums_are_separate_entries(self):
         """Same (artist, title) under two albums must be stored as independent entries."""
@@ -258,14 +258,14 @@ class CatalogTests(unittest.TestCase):
             self.assertEqual(a["lyrics"], "lyrics A")
             self.assertEqual(b["lyrics"], "lyrics B")
 
-    def test_get_without_album_returns_any_match(self):
-        """get(artist, title) without album should find an entry regardless of album."""
+    def test_get_exact_album_only(self):
+        """get must match exactly by (artist, title, album) — no cross-album fallback."""
         with TemporaryDirectory() as tmp:
             cat = Catalog(Path(tmp) / "catalog.json")
             cat.add("Artist", "Song", "Album X", "", "lyrics")
-            entry = cat.get("Artist", "Song")
-            self.assertIsNotNone(entry)
-            self.assertEqual(entry["title"], "Song")
+            self.assertIsNotNone(cat.get("Artist", "Song", "Album X"))
+            self.assertIsNone(cat.get("Artist", "Song", "Album Y"))
+            self.assertIsNone(cat.get("Artist", "Song"))
 
     def test_remove_album_entries_does_not_touch_other_albums(self):
         """remove_album_entries must only delete the exact (artist, title, album) triple."""
