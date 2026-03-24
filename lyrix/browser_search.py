@@ -1,16 +1,32 @@
 """Search methods for LyricsBrowser — song, album, and artist search."""
 
-import sys
 import threading
 import tkinter.messagebox as mb
 
 try:
-    from .catalog import SONGS_CATEGORY, _extract_name, _release_year, _unpack_track
+    from .catalog import (
+        SEPARATOR,
+        SONGS_CATEGORY,
+        _extract_name,
+        _format_album_header,
+        _format_song_header,
+        _release_year,
+        _unpack_track,
+    )
 except ImportError:
-    import pathlib
+    import sys
+    from pathlib import Path
 
-    sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
-    from catalog import SONGS_CATEGORY, _extract_name, _release_year, _unpack_track  # type: ignore
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from catalog import (
+        SEPARATOR,
+        SONGS_CATEGORY,
+        _extract_name,
+        _format_album_header,
+        _format_song_header,
+        _release_year,
+        _unpack_track,
+    )  # type: ignore
 
 
 class BrowserSearch:
@@ -63,8 +79,6 @@ class BrowserSearch:
         ss_album = getattr(ss, "album", {}) or {}
         album_name = ss_album.get("name") or SONGS_CATEGORY
         release_year = _release_year(ss_album)
-        year_suffix = f" ({release_year})" if release_year else ""
-
         lyrics_text = ss.to_text()
 
         self.catalog.add(
@@ -76,13 +90,10 @@ class BrowserSearch:
             track=track_num,
         )
 
-        from .catalog import SEPARATOR
-
-        header = (
-            f"{SEPARATOR}\nArtist: {ss.artist}\nSong: {title}\n"
-            f"Album: {album_name}{year_suffix}\n{SEPARATOR}\n\n"
+        self._set_output(
+            _format_song_header(ss.artist, title, album_name, release_year)
+            + lyrics_text
         )
-        self._set_output(header + lyrics_text)
         self._set_status(f"Found and imported: {title}")
         self._refresh_tree()
 
@@ -134,8 +145,6 @@ class BrowserSearch:
         album_name = getattr(ss, "name", "").strip() or "Unknown album"
         album_year = _release_year(ss)
 
-        from .catalog import SEPARATOR
-
         tracks_text_parts = []
         entries_to_add = []
 
@@ -143,16 +152,15 @@ class BrowserSearch:
             num, track = _unpack_track(item)
             track_num = num if isinstance(num, int) else 0
             lyrics = track.to_text()
-
+            title = track.title.strip()
             prefix = f"{num}. " if num is not None else ""
             tracks_text_parts.append(
-                f"{SEPARATOR}\n{prefix}{track.title}\n{SEPARATOR}\n{lyrics}\n\n\n"
+                f"{SEPARATOR}\n{prefix}{title}\n{SEPARATOR}\n{lyrics}\n\n\n"
             )
-
             entries_to_add.append(
                 {
                     "artist": artist_name,
-                    "title": track.title,
+                    "title": title,
                     "album": album_name,
                     "year": album_year,
                     "lyrics": lyrics,
@@ -161,12 +169,10 @@ class BrowserSearch:
             )
 
         self.catalog.add_many(entries_to_add)
-
-        header = (
-            f"{SEPARATOR}\nArtist: {artist_name}\nAlbum: {album_name}"
-            f"{' (' + album_year + ')' if album_year else ''}\n{SEPARATOR}\n\n"
+        self._set_output(
+            _format_album_header(artist_name, album_name, album_year)
+            + "".join(tracks_text_parts)
         )
-        self._set_output(header + "".join(tracks_text_parts))
         self._set_status(f"Found and imported: {album_name} ({len(ss.tracks)} tracks)")
         self._refresh_tree()
 

@@ -64,17 +64,23 @@ def _release_year(album_data) -> str:
     return ""
 
 
-def _song_header(song):
-    album = getattr(song, "album", {}) or {}
-    album_name = album.get("name") or "Unknown album"
-    year = _release_year(album)
+def _format_song_header(artist: str, title: str, album: str, year: str) -> str:
+    """Build a song header block from plain strings."""
     year_suffix = f" ({year})" if year else ""
     return (
         f"{SEPARATOR}\n"
-        f"Artist: {song.artist}\n"
-        f"Song: {song.title}\n"
-        f"Album: {album_name}{year_suffix}\n"
+        f"Artist: {artist}\n"
+        f"Song: {title}\n"
+        f"Album: {album}{year_suffix}\n"
         f"{SEPARATOR}\n\n"
+    )
+
+
+def _format_album_header(artist: str, album: str, year: str) -> str:
+    """Build an album header block from plain strings."""
+    year_suffix = f" ({year})" if year else ""
+    return (
+        f"{SEPARATOR}\nArtist: {artist}\nAlbum: {album}{year_suffix}\n{SEPARATOR}\n\n"
     )
 
 
@@ -106,6 +112,7 @@ class Catalog:
         self._data: dict = {}
         self._lock = Lock()
         self._title_index: dict[tuple, list[str]] = {}
+        self._file_mtime: int = 0
         self._load()
 
     def _load(self):
@@ -123,6 +130,10 @@ class Catalog:
                 if needs_save:
                     self._save()
                 self._rebuild_index()
+                try:
+                    self._file_mtime = self._path.stat().st_mtime_ns
+                except OSError:
+                    pass
             except Exception as exc:
                 logging.getLogger(__name__).error(
                     "Catalog at %s is unreadable (%s) — starting empty; "
@@ -148,6 +159,10 @@ class Catalog:
             self._path.parent.mkdir(parents=True, exist_ok=True)
             tmp.write_text(content, encoding="utf-8")
             tmp.replace(self._path)
+            try:
+                self._file_mtime = self._path.stat().st_mtime_ns
+            except OSError:
+                pass
         except Exception:
             try:
                 tmp.unlink()
@@ -369,16 +384,37 @@ class Catalog:
         return updated
 
     def reload(self):
-        """Re-read the catalog file, picking up changes made by another process."""
-        if not self._path.exists():
+        """Re-read the catalog file if it has changed on disk since last load/save."""
+        try:
+            mtime = self._path.stat().st_mtime_ns
+        except OSError:
+            return
+        if mtime == self._file_mtime:
             return
         try:
             raw = json.loads(self._path.read_text(encoding="utf-8"))
             with self._lock:
                 self._data = raw.get("entries", {})
                 self._rebuild_index()
-        except Exception:
-            pass  # keep existing in-memory data on read error
+                self._file_mtime = mtime
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                "Catalog reload failed (%s) — keeping existing in-memory data", exc
+            )
+
+    def find_by_artist(self, artist: str) -> list[dict]:
+        """Return all entries for a given artist."""
+        al = artist.lower().strip()
+        with self._lock:
+            return [e for e in self._data.values() if e["artist"].lower().strip() == al]
+
+    def all_artist_album_pairs(self) -> set[tuple[str, str]]:
+        """Return a set of (artist_lower, album_lower) pairs across all entries."""
+        with self._lock:
+            return {
+                (e["artist"].lower().strip(), (e.get("album") or "").lower().strip())
+                for e in self._data.values()
+            }
 
     def all_entries(self) -> list[dict]:
         with self._lock:

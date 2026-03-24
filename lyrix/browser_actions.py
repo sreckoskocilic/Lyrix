@@ -1,7 +1,6 @@
 """Action methods for LyricsBrowser — update, import, fetch missing."""
 
 import logging
-import sys
 import threading
 import tkinter.messagebox as mb
 
@@ -13,15 +12,11 @@ try:
         _unpack_track,
     )
 except ImportError:
-    import pathlib
+    import sys
+    from pathlib import Path
 
-    sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
-    from catalog import (  # type: ignore
-        SONGS_CATEGORY,
-        _extract_name,
-        _release_year,
-        _unpack_track,
-    )
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from catalog import SONGS_CATEGORY, _extract_name, _release_year, _unpack_track  # type: ignore
 
 
 def _build_track_entries(
@@ -35,7 +30,7 @@ def _build_track_entries(
         entries.append(
             {
                 "artist": artist_name,
-                "title": track.title,
+                "title": track.title.strip(),
                 "album": album_name,
                 "year": album_year,
                 "lyrics": track.to_text(),
@@ -87,12 +82,10 @@ class BrowserActions:
 
         elif "artist" in tags:
             artist_name = self.tree.item(item, "text")
-            artist_lower = artist_name.lower().strip()
             album_map: dict[str, list] = {}
-            for e in self.catalog.all_entries():
-                if e["artist"].lower().strip() == artist_lower:
-                    alb = e.get("album") or ""
-                    album_map.setdefault(alb, []).append((e["artist"], e["title"]))
+            for e in self.catalog.find_by_artist(artist_name):
+                alb = e.get("album") or ""
+                album_map.setdefault(alb, []).append((e["artist"], e["title"]))
             if not album_map:
                 return
             total = sum(len(s) for s in album_map.values())
@@ -128,12 +121,13 @@ class BrowserActions:
             album_name = SONGS_CATEGORY
         year = _release_year(ss_album) or (existing or {}).get("year", "")
         track = (existing or {}).get("track", 0)
-        if ss.title != title:
+        ss_title = ss.title.strip()
+        if ss_title != title:
             self.catalog.remove(artist, title, album)
-        self.catalog.add(artist, ss.title, album_name, year, ss.to_text(), track=track)
+        self.catalog.add(artist, ss_title, album_name, year, ss.to_text(), track=track)
         self._refresh_tree()
-        self._set_status(f"Updated: {ss.title}", duration_ms=4000)
-        entry = self.catalog.get(artist, ss.title, album_name)
+        self._set_status(f"Updated: {ss_title}", duration_ms=4000)
+        entry = self.catalog.get(artist, ss_title, album_name)
         if entry:
             self._current_entry = entry
             self._edit_btn.configure(state="normal")
@@ -209,7 +203,9 @@ class BrowserActions:
                         continue
                     updated += len(ss.tracks)
                     continue
-            # Fallback: update songs individually
+            # Fallback: update songs individually, batch writes at end
+            song_entries: list[dict] = []
+            title_changes: list[tuple] = []
             for a, t in songs:
                 if self._closing:
                     break
@@ -231,12 +227,26 @@ class BrowserActions:
                     )
                     yr = _release_year(ss_album) or (existing or {}).get("year", "")
                     trk = (existing or {}).get("track", 0)
-                    if ss.title != t:
-                        self.catalog.remove(a, t, album_name)
-                    self.catalog.add(a, ss.title, alb, yr, ss.to_text(), track=trk)
+                    ss_title = ss.title.strip()
+                    if ss_title != t:
+                        title_changes.append((a, t, album_name))
+                    song_entries.append(
+                        {
+                            "artist": a,
+                            "title": ss_title,
+                            "album": alb,
+                            "year": yr,
+                            "lyrics": ss.to_text(),
+                            "track": trk,
+                        }
+                    )
                     updated += 1
                 else:
                     failed += 1
+            if title_changes:
+                self.catalog.remove_album_entries(title_changes)
+            if song_entries:
+                self.catalog.add_many(song_entries)
         self._ui(self._set_busy, False)
         self._ui(self._refresh_tree)
         msg = f"Updated {updated} songs" + (f", {failed} failed" if failed else "")
@@ -294,10 +304,7 @@ class BrowserActions:
             self._ui(self._set_status, f"No albums found for: {artist_name}", 4000)
             return
 
-        existing = {
-            (e["artist"].lower().strip(), (e.get("album") or "").lower().strip())
-            for e in self.catalog.all_entries()
-        }
+        existing = self.catalog.all_artist_album_pairs()
 
         added = skipped = failed = 0
         for i, album in enumerate(albums, 1):
@@ -323,22 +330,7 @@ class BrowserActions:
                 failed += 1
                 continue
             year = _release_year(ss) or ""
-            entries = []
-            for item in ss.tracks:
-                num, track = _unpack_track(item)
-                track_num = (
-                    num if isinstance(num, int) else (getattr(track, "number", 0) or 0)
-                )
-                entries.append(
-                    {
-                        "artist": artist_name,
-                        "title": track.title.strip(),
-                        "album": album_name,
-                        "year": year,
-                        "lyrics": track.to_text(),
-                        "track": track_num,
-                    }
-                )
+            entries = _build_track_entries(ss.tracks, artist_name, album_name, year)
             if entries:
                 self.catalog.add_many(entries)
                 added += len(entries)
@@ -370,6 +362,8 @@ class BrowserActions:
 
     def _run_fetch_missing(self, entries: list):
         added = failed = 0
+        fetched_entries: list[dict] = []
+        title_changes: list[tuple] = []
         for i, e in enumerate(entries, 1):
             if self._closing:
                 break
@@ -387,19 +381,26 @@ class BrowserActions:
                 continue
             if ss:
                 ss_album = getattr(ss, "album", {}) or {}
-                if ss.title != e["title"]:
-                    self.catalog.remove(e["artist"], e["title"], e.get("album", ""))
-                self.catalog.add(
-                    e["artist"],
-                    ss.title,
-                    e.get("album") or ss_album.get("name", ""),
-                    e.get("year") or _release_year(ss_album),
-                    ss.to_text(),
-                    track=e.get("track", 0),
+                ss_title = ss.title.strip()
+                if ss_title != e["title"]:
+                    title_changes.append((e["artist"], e["title"], e.get("album", "")))
+                fetched_entries.append(
+                    {
+                        "artist": e["artist"],
+                        "title": ss_title,
+                        "album": e.get("album") or ss_album.get("name", ""),
+                        "year": e.get("year") or _release_year(ss_album),
+                        "lyrics": ss.to_text(),
+                        "track": e.get("track", 0),
+                    }
                 )
                 added += 1
             else:
                 failed += 1
+        if title_changes:
+            self.catalog.remove_album_entries(title_changes)
+        if fetched_entries:
+            self.catalog.add_many(fetched_entries)
         self._ui(self._set_busy, False)
         self._ui(self._refresh_tree)
         msg = f"Fetched {added} lyrics" + (f", {failed} not found" if failed else "")

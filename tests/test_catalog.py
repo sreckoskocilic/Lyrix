@@ -1,4 +1,5 @@
 import json
+import os
 import threading
 import unittest
 from pathlib import Path
@@ -177,6 +178,31 @@ class CatalogTests(unittest.TestCase):
             cat_path.unlink()
             cat.reload()
             self.assertEqual(len(cat), 1)  # in-memory data preserved
+
+    def test_reload_skips_when_mtime_unchanged(self):
+        with TemporaryDirectory() as tmp:
+            cat_path = Path(tmp) / "catalog.json"
+            cat = Catalog(cat_path)
+            cat.add("A", "Song", "Album", "2020", "lyrics")
+
+            # Tamper with the file without changing mtime
+            original_mtime = cat_path.stat().st_mtime_ns
+            data = json.loads(cat_path.read_text())
+            data["entries"][Catalog._key("B", "Other")] = {
+                "artist": "B",
+                "title": "Other",
+                "album": "",
+                "year": "",
+                "track": 0,
+                "lyrics": "x",
+                "added": "2024-01-01T00:00:00",
+            }
+            cat_path.write_text(json.dumps(data))
+            # Restore original mtime so reload skips
+            os.utime(cat_path, ns=(original_mtime, original_mtime))
+
+            cat.reload()
+            self.assertEqual(len(cat), 1)  # reload was skipped
 
     def test_add_preserves_added_timestamp_on_update(self):
         with TemporaryDirectory() as tmp:
@@ -493,6 +519,109 @@ class CatalogTests(unittest.TestCase):
             self.assertEqual(count, 0)
             content = csv_path.read_text(encoding="utf-8")
             self.assertIn("artist", content)  # header still present
+
+    def test_find_by_artist(self):
+        with TemporaryDirectory() as tmp:
+            cat = Catalog(Path(tmp) / "catalog.json")
+            cat.add("Artist A", "Song 1", "Album 1", "2020", "lyrics1")
+            cat.add("Artist A", "Song 2", "Album 1", "2020", "lyrics2")
+            cat.add("Artist B", "Song 3", "Album 2", "2021", "lyrics3")
+            results = cat.find_by_artist("Artist A")
+            self.assertEqual(len(results), 2)
+            titles = {e["title"] for e in results}
+            self.assertEqual(titles, {"Song 1", "Song 2"})
+
+    def test_find_by_artist_case_insensitive(self):
+        with TemporaryDirectory() as tmp:
+            cat = Catalog(Path(tmp) / "catalog.json")
+            cat.add("Artist A", "Song 1", "Album 1", "2020", "lyrics")
+            results = cat.find_by_artist("artist a")
+            self.assertEqual(len(results), 1)
+
+    def test_find_by_artist_not_found(self):
+        with TemporaryDirectory() as tmp:
+            cat = Catalog(Path(tmp) / "catalog.json")
+            cat.add("Artist A", "Song 1", "Album", "2020", "lyrics")
+            self.assertEqual(cat.find_by_artist("Unknown"), [])
+
+    def test_all_artist_album_pairs(self):
+        with TemporaryDirectory() as tmp:
+            cat = Catalog(Path(tmp) / "catalog.json")
+            cat.add("Artist A", "Song 1", "Album 1", "2020", "lyrics1")
+            cat.add("Artist A", "Song 2", "Album 2", "2021", "lyrics2")
+            cat.add("Artist B", "Song 3", "Album 1", "2020", "lyrics3")
+            pairs = cat.all_artist_album_pairs()
+            self.assertIn(("artist a", "album 1"), pairs)
+            self.assertIn(("artist a", "album 2"), pairs)
+            self.assertIn(("artist b", "album 1"), pairs)
+            self.assertEqual(len(pairs), 3)
+
+    def test_all_artist_album_pairs_empty(self):
+        with TemporaryDirectory() as tmp:
+            cat = Catalog(Path(tmp) / "catalog.json")
+            self.assertEqual(cat.all_artist_album_pairs(), set())
+
+    def test_add_many_new_entries_updates_title_index(self):
+        """add_many with brand-new entries must update _title_index (is_new=True path)."""
+        with TemporaryDirectory() as tmp:
+            cat = Catalog(Path(tmp) / "catalog.json")
+            cat.add_many(
+                [
+                    {
+                        "artist": "A",
+                        "title": "One",
+                        "album": "Album",
+                        "year": "",
+                        "lyrics": "x",
+                        "track": 1,
+                    },
+                    {
+                        "artist": "A",
+                        "title": "Two",
+                        "album": "Album",
+                        "year": "",
+                        "lyrics": "y",
+                        "track": 2,
+                    },
+                ]
+            )
+            self.assertEqual(len(cat), 2)
+            self.assertIsNotNone(cat.find("A", "One"))
+            self.assertIsNotNone(cat.find("A", "Two"))
+
+    def test_load_stat_oserror_is_swallowed(self):
+        """OSError on stat() after loading the catalog file must not propagate."""
+        with TemporaryDirectory() as tmp:
+            cat_path = Path(tmp) / "catalog.json"
+            key = Catalog._key("A", "Song", "Album")
+            cat_path.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "entries": {
+                            key: {
+                                "artist": "A",
+                                "title": "Song",
+                                "album": "Album",
+                                "year": "",
+                                "track": 0,
+                                "lyrics": "x",
+                                "added": "2024-01-01T00:00:00",
+                            },
+                        },
+                    }
+                )
+            )
+            with patch.object(Path, "stat", side_effect=OSError("no stat")):
+                cat = Catalog(cat_path)
+            self.assertEqual(len(cat), 1)
+
+    def test_save_stat_oserror_is_swallowed(self):
+        """OSError on stat() after writing the catalog file must not propagate."""
+        with TemporaryDirectory() as tmp:
+            cat = Catalog(Path(tmp) / "catalog.json")
+            with patch.object(Path, "stat", side_effect=OSError("no stat")):
+                cat._save()  # must not raise
 
 
 if __name__ == "__main__":

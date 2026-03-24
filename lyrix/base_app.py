@@ -8,13 +8,10 @@ import tkinter as tk
 try:
     from .catalog import ENV_ABS_PATH, FONT_NAME, _BASE_DIR, get_resource_path
 except ImportError:
-    # Allow running as a script (module executed directly)
-    import pathlib
-    import sys
+    from pathlib import Path as _Path
+    import sys as _sys
 
-    parent = str(pathlib.Path(__file__).resolve().parent.parent)
-    if parent not in sys.path:
-        sys.path.insert(0, parent)
+    _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
     from catalog import ENV_ABS_PATH, FONT_NAME, _BASE_DIR, get_resource_path  # type: ignore
 
 _SETTINGS_PATH = _BASE_DIR / "settings.json"

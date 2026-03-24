@@ -1,7 +1,7 @@
 # Lyrix
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-80%20passed-green.svg)](https://github.com/skocho/lyrix/actions)
+[![Tests](https://img.shields.io/badge/tests-59%20passed-green.svg)](https://github.com/skocho/lyrix/actions)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-green.svg)](https://github.com/skocho/lyrix/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -14,11 +14,12 @@ Simple search interface. Enter artist + song or artist + album, fetch lyrics, an
 
 ### Lyrics Browser
 Full catalog manager with a tree view (artist → album → song). Supports:
-- **Scan Folder** — recursively scan a directory for MP3s and fetch lyrics for all of them
-- **Import File** — import a single MP3
-- **Update Lyrics** — re-fetch lyrics for a selected song, album, or artist
-- **Fill Years** — fill in missing release years for albums in the catalog
+- **Song / Album / Artist search** — fetch and import lyrics directly from the browser
+- **Import All Releases** — import every album for a selected artist
+- **Update** — re-fetch lyrics for a selected song, album, or artist
+- **Fetch Missing Lyrics** — fill in lyrics for catalog entries that have none
 - **Remove** — remove a song, album, or artist from the catalog
+- **Edit / Copy** — inline-edit or copy lyrics to clipboard
 - Filter box for searching the catalog by artist, album, or title
 
 ## Setup
@@ -71,9 +72,11 @@ lyrix/
 │   ├── __init__.py      # Package init
 │   ├── __main__.py      # Entry point
 │   ├── browser.py       # Lyrics Browser app
+│   ├── browser_actions.py # Browser action methods (update, import, fetch)
+│   ├── browser_search.py  # Browser search methods
 │   ├── search.py        # Lyrics Search app
-│   ├── catalog.py       # Persistent catalog + MP3 tag helpers
-│   └── base_app.py     # Shared base class and settings
+│   ├── catalog.py       # Persistent catalog and helpers
+│   └── base_app.py      # Shared base class and settings
 ├── .env                 # API token (gitignored)
 ├── .env.example
 ├── menu.py              # macOS menu bar launcher

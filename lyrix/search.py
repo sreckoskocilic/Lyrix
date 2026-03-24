@@ -18,17 +18,14 @@ try:
         SEPARATOR,
         SONGS_CATEGORY,
         _extract_name,
+        _format_album_header,
+        _format_song_header,
         _release_year,
-        _song_header,
         _unpack_track,
         get_resource_path,
     )
 except ImportError:
-    # Allow running as a script: python lyrix/search.py
-    import pathlib
-    import sys
-
-    sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from base_app import LyricsBaseApp, THEME_BG, THEME_FG, THEME_SELECTBG  # type: ignore
     from catalog import (  # type: ignore
         Catalog,
@@ -37,8 +34,9 @@ except ImportError:
         SEPARATOR,
         SONGS_CATEGORY,
         _extract_name,
+        _format_album_header,
+        _format_song_header,
         _release_year,
-        _song_header,
         _unpack_track,
         get_resource_path,
     )
@@ -202,14 +200,10 @@ class LyricsApp(LyricsBaseApp):
     def _render_cached_song(self, entry: dict):
         album_str = entry.get("album") or "Unknown album"
         year_str = entry.get("year", "")
-        header = (
-            f"{SEPARATOR}\n"
-            f"Artist: {entry['artist']}\n"
-            f"Song: {entry['title']}\n"
-            f"Album: {album_str}{' (' + year_str + ')' if year_str else ''}\n"
-            f"{SEPARATOR}\n\n"
+        self._set_output(
+            _format_song_header(entry["artist"], entry["title"], album_str, year_str)
+            + entry["lyrics"]
         )
-        self._set_output(header + entry["lyrics"])
         if entry.get("album"):
             self.album_entry.delete(0, tk.END)
             self.album_entry.insert(0, entry["album"])
@@ -229,10 +223,10 @@ class LyricsApp(LyricsBaseApp):
         lyrics = ss.to_text()
         album = getattr(ss, "album", {}) or {}
         year = _release_year(album)
-        album_name = album.get("name", "")
-        if not album_name:
-            album_name = SONGS_CATEGORY
-        self._set_output(_song_header(ss) + lyrics)
+        album_name = album.get("name", "") or SONGS_CATEGORY
+        self._set_output(
+            _format_song_header(ss.artist, ss.title, album_name, year) + lyrics
+        )
         self.catalog.add(ss.artist, ss.title, album_name, year, lyrics)
         self.default_filename = ss.title.strip() or "lyrics"
         self.master.title(f"{ss.title} — Lyrics Search")
@@ -247,15 +241,11 @@ class LyricsApp(LyricsBaseApp):
         self.song_entry.delete(0, tk.END)
         # Serve from catalog if all tracks with lyrics are available
         self.catalog.reload()
-        artist_lower = artist.lower().strip()
-        album_lower = album.lower().strip()
         cached_tracks = sorted(
             [
                 e
-                for e in self.catalog.all_entries()
-                if e["artist"].lower().strip() == artist_lower
-                and (e.get("album") or "").lower().strip() == album_lower
-                and e.get("lyrics", "").strip()
+                for e in self.catalog.find_album(artist, album)
+                if e.get("lyrics", "").strip()
             ],
             key=lambda e: (e.get("track") or 9999, e["title"].lower()),
         )
@@ -274,10 +264,6 @@ class LyricsApp(LyricsBaseApp):
         artist_name = tracks[0]["artist"]
         album_name = tracks[0].get("album") or "Unknown album"
         year_str = tracks[0].get("year", "")
-        header = (
-            f"{SEPARATOR}\nArtist: {artist_name}\nAlbum: {album_name}"
-            f"{' (' + year_str + ')' if year_str else ''}\n{SEPARATOR}\n\n"
-        )
         parts = []
         for e in tracks:
             num = e.get("track")
@@ -285,7 +271,9 @@ class LyricsApp(LyricsBaseApp):
             parts.append(
                 f"{SEPARATOR}\n{prefix}{e['title']}\n{SEPARATOR}\n{e['lyrics']}\n\n\n"
             )
-        self._set_output(header + "".join(parts))
+        self._set_output(
+            _format_album_header(artist_name, album_name, year_str) + "".join(parts)
+        )
         self.default_filename = album_name
         self.master.title(f"{album_name} — Lyrics Search")
         self._set_status(f"Loaded from catalog: {album_name} ({len(tracks)} tracks)")
@@ -304,10 +292,6 @@ class LyricsApp(LyricsBaseApp):
         artist_name = _extract_name(getattr(ss, "artist", None), "Unknown artist")
         album_name = getattr(ss, "name", "").strip() or "Unknown album"
         album_year = _release_year(ss)
-        header = (
-            f"{SEPARATOR}\nArtist: {artist_name}\nAlbum: {album_name}"
-            f"{' (' + album_year + ')' if album_year else ''}\n{SEPARATOR}\n\n"
-        )
         # Single pass: build display text and catalog entries, calling to_text() once each
         tracks_text_parts = []
         entries_to_add = []
@@ -315,21 +299,25 @@ class LyricsApp(LyricsBaseApp):
             num, track = _unpack_track(item)
             track_num = num if isinstance(num, int) else 0
             lyrics = track.to_text()
+            title = track.title.strip()
             prefix = f"{num}. " if num is not None else ""
             tracks_text_parts.append(
-                f"{SEPARATOR}\n{prefix}{track.title}\n{SEPARATOR}\n{lyrics}\n\n\n"
+                f"{SEPARATOR}\n{prefix}{title}\n{SEPARATOR}\n{lyrics}\n\n\n"
             )
             entries_to_add.append(
                 {
                     "artist": artist_name,
-                    "title": track.title,
+                    "title": title,
                     "album": album_name,
                     "year": album_year,
                     "lyrics": lyrics,
                     "track": track_num,
                 }
             )
-        self._set_output(header + "".join(tracks_text_parts))
+        self._set_output(
+            _format_album_header(artist_name, album_name, album_year)
+            + "".join(tracks_text_parts)
+        )
         self.catalog.add_many(entries_to_add)
         self.default_filename = album_name
         self.master.title(f"{album_name} — Lyrics Search")

@@ -1,5 +1,6 @@
 """Lyrics Browser app — catalog manager with tree view."""
 
+import difflib
 import json
 import sys
 import tkinter as tk
@@ -22,12 +23,11 @@ try:
         FONT_NAME,
         SEPARATOR,
         SONGS_CATEGORY,
+        _format_song_header,
         get_resource_path,
     )
 except ImportError:
-    import pathlib
-
-    sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from base_app import LyricsBaseApp, THEME_BG, THEME_FG, THEME_SELECTBG, _year_sort  # type: ignore
     from browser_actions import BrowserActions  # type: ignore
     from browser_search import BrowserSearch  # type: ignore
@@ -37,6 +37,7 @@ except ImportError:
         FONT_NAME,
         SEPARATOR,
         SONGS_CATEGORY,
+        _format_song_header,
         get_resource_path,
     )
 
@@ -355,9 +356,7 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
 
     def _fuzzy_match(self, query: str, text: str, threshold: float = 0.6) -> bool:
         """Return True if query fuzzy-matches text above threshold."""
-        from difflib import SequenceMatcher
-
-        return SequenceMatcher(None, query, text).ratio() >= threshold
+        return difflib.SequenceMatcher(None, query, text).ratio() >= threshold
 
     def _refresh_tree(self):
         self.catalog.reload()
@@ -534,19 +533,19 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
 
         elif "album" in tags:
             children_values = [
-                v
+                vals
                 for c in self.tree.get_children(item)
-                if (v := self.tree.item(c, "values"))
+                if (vals := self.tree.item(c, "values"))
             ]
             if children_values and mb.askyesno(
                 "Remove Album",
                 f"Remove all {len(children_values)} song(s) in this album from the catalog?",
             ):
-                songs = [(v[0], v[1], v[2]) for v in children_values]
+                songs = [(vals[0], vals[1], vals[2]) for vals in children_values]
                 entries = [
                     e
-                    for v in children_values
-                    if (e := self.catalog.get(v[0], v[1], v[2]))
+                    for vals in children_values
+                    if (e := self.catalog.get(vals[0], vals[1], vals[2]))
                 ]
                 if entries:
                     self._push_undo(entries)
@@ -556,12 +555,7 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
 
         elif "artist" in tags:
             artist_name = self.tree.item(item, "text")
-            artist_lower = artist_name.lower().strip()
-            entries = [
-                e
-                for e in self.catalog.all_entries()
-                if e["artist"].lower().strip() == artist_lower
-            ]
+            entries = self.catalog.find_by_artist(artist_name)
             count = len(entries)
             if count and mb.askyesno(
                 "Remove Artist",
@@ -575,14 +569,10 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
     def _show_entry(self, entry: dict):
         album_str = entry.get("album") or "Unknown album"
         year_str = entry.get("year", "")
-        header = (
-            f"{SEPARATOR}\n"
-            f"Artist: {entry['artist']}\n"
-            f"Song: {entry['title']}\n"
-            f"Album: {album_str}{' (' + year_str + ')' if year_str else ''}\n"
-            f"{SEPARATOR}\n\n"
+        self._set_output(
+            _format_song_header(entry["artist"], entry["title"], album_str, year_str)
+            + entry["lyrics"]
         )
-        self._set_output(header + entry["lyrics"])
 
     # ── Settings persistence ──────────────────────────────────────────────────
 

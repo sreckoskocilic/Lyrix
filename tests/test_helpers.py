@@ -3,8 +3,9 @@ from types import SimpleNamespace
 
 from lyrix.catalog import (
     _release_year,
+    _format_album_header,
+    _format_song_header,
     _format_track,
-    _song_header,
     _extract_name,
     get_resource_path,
 )
@@ -39,13 +40,9 @@ class FormattingTests(unittest.TestCase):
         self.assertIn("1. Song A", text)
         self.assertIn("lyrics", text)
 
-    def test_song_header(self):
-        song = SimpleNamespace(
-            artist="Artist",
-            title="Title",
-            album={"name": "Album", "release_date_for_display": "2020"},
-        )
-        header = _song_header(song)
+    def test_format_song_header_from_song_object(self):
+        """_format_song_header produces the same output regardless of the source."""
+        header = _format_song_header("Artist", "Title", "Album", "2020")
         self.assertIn("Artist: Artist", header)
         self.assertIn("Song: Title", header)
         self.assertIn("Album: Album (2020)", header)
@@ -57,6 +54,31 @@ class FormattingTests(unittest.TestCase):
     def test_extract_name_fallback(self):
         obj = SimpleNamespace()  # no name attribute
         self.assertEqual(_extract_name(obj), "Unknown")
+
+    def test_extract_name_dict(self):
+        self.assertEqual(_extract_name({"name": "Artist"}), "Artist")
+        self.assertEqual(_extract_name({"name": None}, "fallback"), "fallback")
+
+    def test_format_song_header(self):
+        header = _format_song_header("Artist", "Title", "Album", "2020")
+        self.assertIn("Artist: Artist", header)
+        self.assertIn("Song: Title", header)
+        self.assertIn("Album: Album (2020)", header)
+
+    def test_format_song_header_no_year(self):
+        header = _format_song_header("Artist", "Title", "Album", "")
+        self.assertIn("Album: Album\n", header)
+        self.assertNotIn("()", header)
+
+    def test_format_album_header(self):
+        header = _format_album_header("Artist", "Album", "2021")
+        self.assertIn("Artist: Artist", header)
+        self.assertIn("Album: Album (2021)", header)
+
+    def test_format_album_header_no_year(self):
+        header = _format_album_header("Artist", "Album", "")
+        self.assertIn("Album: Album\n", header)
+        self.assertNotIn("()", header)
 
 
 if __name__ == "__main__":
