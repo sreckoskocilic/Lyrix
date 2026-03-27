@@ -61,7 +61,15 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
         self._tree_song_color = settings.get("tree_song_color", "#5bc0de")
         self._tree_album_color = settings.get("tree_album_color", THEME_FG)
         self._tree_missing_color = settings.get("tree_missing_color", "#6c7086")
+        self._current_theme: str = settings.get("theme", "darkly")
+        if self._current_theme not in self.VALID_THEMES:
+            self._current_theme = "darkly"
+        self._expanded_artists: set[str] = set(settings.get("expanded_artists", []))
+        self._pending_restore: dict | None = settings.get("last_selected") or None
+        self._filter_trace_id: str | None = None
+        self._theme_after_id: str | None = None
 
+        self._set_app_icon()
         self._load_custom_font()
 
         self._restore_font_size(settings)
@@ -107,11 +115,7 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
 
     def _build_ui(self):
         # Apply theme BEFORE creating any widgets to avoid TclError
-        settings = self._read_settings()
-        saved_theme = settings.get("theme", "darkly")
-        if saved_theme not in self.VALID_THEMES:
-            saved_theme = "darkly"
-        self.master.style.theme_use(saved_theme)
+        self.master.style.theme_use(self._current_theme)
 
         outer = ttk.Frame(self.master, padding=10)
         outer.pack(fill="both", expand=True)
@@ -135,12 +139,8 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
             header_frame, textvariable=self.catalog_count_var, font=(FONT_NAME, 9)
         ).pack(side="left", padx=(8, 0))
 
-        # Theme switcher - load saved theme
-        settings = self._read_settings()
-        saved_theme = settings.get("theme", "darkly")
-        if saved_theme not in self.VALID_THEMES:
-            saved_theme = "darkly"
-        self._theme_var = tk.StringVar(value=saved_theme)
+        # Theme switcher
+        self._theme_var = tk.StringVar(value=self._current_theme)
         self._theme_combo = ttk.Combobox(
             header_frame,
             textvariable=self._theme_var,
@@ -219,7 +219,11 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
         self.tree.bind("<Down>", self._on_tree_arrow)
         btn = "<Button-2>" if sys.platform == "darwin" else "<Button-3>"
         self.tree.bind(btn, self._on_tree_right_click)
-        self.filter_var.trace_add("write", self._on_filter_change)
+        self.tree.bind("<<TreeviewOpen>>", self._on_tree_open)
+        self.tree.bind("<<TreeviewClose>>", self._on_tree_close)
+        self._filter_trace_id = self.filter_var.trace_add(
+            "write", self._on_filter_change
+        )
 
         self.tree.tag_configure("artist", font=(FONT_NAME, 9, "bold"))
         self.tree.tag_configure("album", foreground=self._tree_album_color)
@@ -359,6 +363,9 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
         return difflib.SequenceMatcher(None, query, text).ratio() >= threshold
 
     def _refresh_tree(self):
+        if self._filter_after_id is not None:
+            self.master.after_cancel(self._filter_after_id)
+            self._filter_after_id = None
         self.catalog.reload()
         raw_filter = (
             "" if self._filter_placeholder else self.filter_var.get().strip().lower()
@@ -375,15 +382,21 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
         artist_count = len({t[1] for t in keyed4})
 
         if raw_filter:
+            use_fuzzy = len(raw_filter) >= 3
             keyed4 = [
                 t
                 for t in keyed4
                 if raw_filter in t[1]
                 or raw_filter in t[2]
                 or raw_filter in t[3]
-                or self._fuzzy_match(raw_filter, t[1])
-                or self._fuzzy_match(raw_filter, t[2])
-                or self._fuzzy_match(raw_filter, t[3])
+                or (
+                    use_fuzzy
+                    and (
+                        self._fuzzy_match(raw_filter, t[1])
+                        or self._fuzzy_match(raw_filter, t[2])
+                        or self._fuzzy_match(raw_filter, t[3])
+                    )
+                )
             ]
 
         canon_year: dict[tuple, str] = {}
@@ -417,7 +430,11 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
 
             if al not in artist_nodes:
                 artist_nodes[al] = self.tree.insert(
-                    "", "end", text=artist, open=True, tags=("artist",)
+                    "",
+                    "end",
+                    text=artist,
+                    open=(artist in self._expanded_artists),
+                    tags=("artist",),
                 )
             if bk not in album_nodes:
                 year_part = f" ({year})" if year else ""
@@ -454,22 +471,31 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
                 f" · {total_count} song{'s' if total_count != 1 else ''}"
             )
 
-        # Restore expanded artist state
-        settings = self._read_settings()
-        expanded_artists = settings.get("expanded_artists", [])
-        for artist_iid in artist_nodes.values():
-            artist_name = self.tree.item(artist_iid, "text")
-            if artist_name in expanded_artists:
-                self.tree.item(artist_iid, open=True)
+        # Prune stale artist names from the cache (e.g. after removing an artist)
+        self._expanded_artists &= {
+            self.tree.item(iid, "text") for iid in artist_nodes.values()
+        }
 
-        # Restore last selected song if no filter is active
+        # Restore the last-viewed song if no filter is active.
+        # _pending_restore carries the saved selection from settings and is consumed once
+        # on startup; after that _current_entry is the authoritative source.
         if not raw_filter:
-            last_selected = settings.get("last_selected", {})
-            if last_selected:
+            if self._pending_restore is not None:
+                restore = self._pending_restore
+                self._pending_restore = None
+            elif self._current_entry:
+                restore = {
+                    "artist": self._current_entry["artist"],
+                    "title": self._current_entry["title"],
+                    "album": self._current_entry.get("album", ""),
+                }
+            else:
+                restore = None
+            if restore:
                 entry = self.catalog.get(
-                    last_selected.get("artist", ""),
-                    last_selected.get("title", ""),
-                    last_selected.get("album", ""),
+                    restore.get("artist", ""),
+                    restore.get("title", ""),
+                    restore.get("album", ""),
                 )
                 if entry:
                     self._current_entry = entry
@@ -497,20 +523,29 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
         self._show_entry(entry)
         self.master.title(f"{entry['title']} — Lyrics Browser")
 
+    def _on_tree_open(self, _event=None):
+        item = self.tree.focus()
+        if item and "artist" in self.tree.item(item, "tags"):
+            self._expanded_artists.add(self.tree.item(item, "text"))
+
+    def _on_tree_close(self, _event=None):
+        item = self.tree.focus()
+        if item and "artist" in self.tree.item(item, "tags"):
+            self._expanded_artists.discard(self.tree.item(item, "text"))
+
     def _on_tree_arrow(self, _event=None):
         """Handle arrow key navigation in tree view."""
-        sel = self.tree.selection()
-        if not sel:
-            # Select first song if nothing selected
-            children = self.tree.get_children()
-            for artist_node in children:
-                songs = self.tree.get_children(artist_node)
-                if songs:
-                    self.tree.selection_set(songs[0])
+        if self.tree.selection():
+            # <<TreeviewSelect>> already fired via the key event — don't double-call
+            return
+        # Nothing selected: pick the first song in the tree
+        for artist_node in self.tree.get_children():
+            for album_node in self.tree.get_children(artist_node):
+                song_items = self.tree.get_children(album_node)
+                if song_items:
+                    self.tree.selection_set(song_items[0])
                     self._on_tree_select()
                     return
-        else:
-            self._on_tree_select()
 
     def _remove_selected(self):
         sel = self.tree.selection()
@@ -576,6 +611,25 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
 
     # ── Settings persistence ──────────────────────────────────────────────────
 
+    def _on_close(self):
+        if self._filter_trace_id is not None:
+            try:
+                self.filter_var.trace_remove("write", self._filter_trace_id)
+            except Exception:
+                pass
+        if self._theme_after_id is not None:
+            try:
+                self.master.after_cancel(self._theme_after_id)
+            except Exception:
+                pass
+        # Force-close the theme dropdown before destroy; an open popdown causes
+        # a TclError when the window is destroyed while the dropdown is visible.
+        try:
+            self._theme_combo.event_generate("<Escape>")
+        except Exception:
+            pass
+        super()._on_close()
+
     def _on_paned_configure(self, event):
         if self._sash_applied:
             return
@@ -587,13 +641,7 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
     def _collect_settings(self, data: dict) -> dict:
         data = super()._collect_settings(data)
         data.setdefault("sash", {})[type(self).__name__] = self._paned.sashpos(0)
-        # Save tree expand state
-        expanded = []
-        for artist_iid in self.tree.get_children():
-            if self.tree.item(artist_iid, "open"):
-                artist_name = self.tree.item(artist_iid, "text")
-                expanded.append(artist_name)
-        data["expanded_artists"] = expanded
+        data["expanded_artists"] = list(self._expanded_artists)
         # Save last selected song
         if self._current_entry:
             data["last_selected"] = {
@@ -792,14 +840,18 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
             return
         new_lyrics = self._extract_lyrics_from_display(full_text)
         e = self._current_entry
-        self.catalog.add(
-            e["artist"],
-            e["title"],
-            e.get("album", ""),
-            e.get("year", ""),
-            new_lyrics,
-            track=e.get("track", 0),
-        )
+        try:
+            self.catalog.add(
+                e["artist"],
+                e["title"],
+                e.get("album", ""),
+                e.get("year", ""),
+                new_lyrics,
+                track=e.get("track", 0),
+            )
+        except Exception as exc:
+            mb.showerror("Save Error", f"Could not save lyrics to catalog:\n{exc}")
+            return
         self._current_entry = self.catalog.get(
             e["artist"], e["title"], e.get("album", "")
         )
@@ -849,12 +901,22 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
         theme = self._theme_var.get()
         if theme not in self.VALID_THEMES:
             return
-        # Close combobox dropdown before theme change to avoid TclError
+        # Close combobox dropdown before theme change to avoid TclError;
+        # cancel any pending theme switch so rapid clicks don't stack.
+        if self._theme_after_id is not None:
+            self.master.after_cancel(self._theme_after_id)
         self._theme_combo.event_generate("<Escape>")
-        self.master.after(50, self._apply_theme, theme)
+        self._theme_after_id = self.master.after(50, self._apply_theme, theme)
 
     def _apply_theme(self, theme: str):
-        self.master.style.theme_use(theme)
+        self._current_theme = theme
+        try:
+            self.master.style.theme_use(theme)
+        except tk.TclError:
+            # ttkbootstrap tries to style the combobox popdown widget which may
+            # not exist yet (dropdown never opened) or may already be destroyed;
+            # the theme itself is applied regardless, so this is safe to ignore.
+            pass
         # Update ScrolledText colors to match new theme
         colors = tb.style.STANDARD_THEMES.get(theme, {}).get("colors", {})
         bg = colors.get("bg", THEME_BG)

@@ -51,6 +51,7 @@ class LyricsApp(LyricsBaseApp):
         self.default_filename = "lyrics"
         self.catalog = Catalog(CATALOG_PATH)
 
+        self._set_app_icon()
         self._load_custom_font()
 
         settings = self._read_settings()
@@ -336,13 +337,11 @@ class LyricsApp(LyricsBaseApp):
         if not content.strip():
             self._set_status("Nothing to save.")
             return
-        self._set_busy(True)
         path = fd.asksaveasfilename(
             defaultextension=".txt",
             filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
             initialfile=self.default_filename,
         )
-        self._set_busy(False)
         if not path:
             return
         try:

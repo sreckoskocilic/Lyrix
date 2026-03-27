@@ -72,6 +72,26 @@ class CatalogTests(unittest.TestCase):
             self.assertEqual(removed, 2)
             self.assertEqual(len(cat), 0)
 
+    def test_remove_artist_skips_malformed_keys(self):
+        with TemporaryDirectory() as tmp:
+            cat_path = Path(tmp) / "catalog.json"
+            cat = Catalog(cat_path)
+            cat.add("Artist", "One", "Album", "", "lyrics")
+            # Inject a malformed key (no tab separators) directly into _data
+            cat._data["malformed"] = {
+                "artist": "Artist",
+                "title": "Bad",
+                "album": "",
+                "year": "",
+                "track": 0,
+                "lyrics": "",
+                "added": "",
+            }
+            # Should not raise; both the valid and the malformed entry are removed
+            removed = cat.remove_artist("Artist")
+            self.assertEqual(removed, 2)
+            self.assertEqual(len(cat), 0)
+
     def test_thread_safety_under_parallel_adds(self):
         with TemporaryDirectory() as tmp:
             cat_path = Path(tmp) / "catalog.json"

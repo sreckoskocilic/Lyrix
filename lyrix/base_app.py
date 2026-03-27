@@ -64,6 +64,21 @@ class LyricsBaseApp:
 
     # ── Font ──────────────────────────────────────────────────────────────────
 
+    def _set_app_icon(self):
+        """Set the dock/taskbar icon from the bundled .icns file (macOS only)."""
+        if sys.platform != "darwin":
+            return
+        icon_path = get_resource_path("LyricsBrowser.icns")
+        if not icon_path.is_file():
+            return
+        try:
+            from AppKit import NSApplication, NSImage  # type: ignore
+
+            image = NSImage.alloc().initWithContentsOfFile_(str(icon_path))
+            NSApplication.sharedApplication().setApplicationIconImage_(image)
+        except Exception:
+            pass
+
     def _load_custom_font(self):
         font_path = get_resource_path("Roboto Mono for Powerline.ttf")
         if not font_path.is_file():
@@ -142,7 +157,8 @@ class LyricsBaseApp:
         self.status_var.set(message)
         if duration_ms:
             self._status_after_id = self.master.after(
-                duration_ms, lambda: self.status_var.set("")
+                duration_ms,
+                lambda: self.status_var.set("") if not self._closing else None,
             )
 
     # ── Thread → UI bridge ────────────────────────────────────────────────────

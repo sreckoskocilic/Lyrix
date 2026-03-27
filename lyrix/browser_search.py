@@ -90,6 +90,13 @@ class BrowserSearch:
             track=track_num,
         )
 
+        # Update current entry so _refresh_tree restores this song, not the old selection
+        new_entry = self.catalog.get(ss.artist, title, album_name)
+        if new_entry:
+            self._current_entry = new_entry
+            self._edit_btn.configure(state="normal")
+            self._copy_btn.configure(state="normal")
+
         self._set_output(
             _format_song_header(ss.artist, title, album_name, release_year)
             + lyrics_text
@@ -168,7 +175,19 @@ class BrowserSearch:
                 }
             )
 
-        self.catalog.add_many(entries_to_add)
+        try:
+            self.catalog.add_many(entries_to_add)
+        except Exception as exc:
+            import tkinter.messagebox as mb
+
+            mb.showerror("Error", f"Failed to save album to catalog:\n{exc}")
+            return
+
+        # Catalog write succeeded: clear current entry so the album display
+        # (multi-track) isn't overwritten by a single-song restore in _refresh_tree
+        self._current_entry = None
+        self._edit_btn.configure(state="disabled")
+        self._copy_btn.configure(state="disabled")
         self._set_output(
             _format_album_header(artist_name, album_name, album_year)
             + "".join(tracks_text_parts)

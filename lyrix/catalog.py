@@ -353,7 +353,10 @@ class Catalog:
                 if v["artist"].lower().strip() == artist_lower
             ]
             for k in keys:
+                del self._data[k]
                 parts = k.split("\t")
+                if len(parts) < 2:
+                    continue
                 at = (parts[0], parts[1])
                 if at in self._title_index:
                     self._title_index[at] = [
@@ -361,7 +364,6 @@ class Catalog:
                     ]
                     if not self._title_index[at]:
                         del self._title_index[at]
-                del self._data[k]
             if keys:
                 self._save()
             return len(keys)

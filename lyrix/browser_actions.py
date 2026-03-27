@@ -157,7 +157,12 @@ class BrowserActions:
             self._ui(self._set_busy, False)
             self._ui(mb.showerror, "Error", f"Could not fetch album lyrics:\n{e}")
             return
-        self.catalog.add_many(entries)
+        try:
+            self.catalog.add_many(entries)
+        except Exception as e:
+            self._ui(self._set_busy, False)
+            self._ui(mb.showerror, "Error", f"Failed to save album to catalog:\n{e}")
+            return
         self._ui(self._set_busy, False)
         self._ui(self._refresh_tree)
         self._ui(
@@ -400,7 +405,14 @@ class BrowserActions:
         if title_changes:
             self.catalog.remove_album_entries(title_changes)
         if fetched_entries:
-            self.catalog.add_many(fetched_entries)
+            try:
+                self.catalog.add_many(fetched_entries)
+            except Exception as e:
+                self._ui(self._set_busy, False)
+                self._ui(
+                    mb.showerror, "Error", f"Failed to save lyrics to catalog:\n{e}"
+                )
+                return
         self._ui(self._set_busy, False)
         self._ui(self._refresh_tree)
         msg = f"Fetched {added} lyrics" + (f", {failed} not found" if failed else "")
