@@ -1,11 +1,11 @@
 # Lyrix
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-59%20passed-green.svg)](https://github.com/skocho/lyrix/actions)
+[![Tests](https://img.shields.io/badge/tests-64%20passed-green.svg)](https://github.com/skocho/lyrix/actions)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-green.svg)](https://github.com/skocho/lyrix/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Two tkinter apps for searching and local browsing song lyrics via the [Genius API](https://genius.com/api-clients).
+Two ttkbootstrap apps for searching and local browsing song lyrics via the [Genius API](https://genius.com/api-clients).
 
 ## Apps
 
@@ -26,6 +26,7 @@ Full catalog manager with a tree view (artist → album → song). Supports:
 
 ```sh
 pip install -r requirements.txt
+pip install -r requirements-dev.txt  # For development/testing
 ```
 
 Copy `.env.example` to `.env` and add your token:
@@ -44,12 +45,20 @@ The optional font **Roboto Mono for Powerline** (`Roboto Mono for Powerline.ttf`
 python -m lyrix.browser   # Lyrics Browser
 python -m lyrix.search    # Lyrics Search
 python -m lyrix            # Lyrics Browser (default)
+python run.py             # Alias for default app
 ```
 
 On macOS, `menu.py` provides a menu bar launcher (requires `pip install rumps`):
 
 ```sh
 python menu.py
+```
+
+## Testing
+
+```sh
+pip install -r requirements-dev.txt
+pytest
 ```
 
 ## Data
@@ -77,12 +86,18 @@ lyrix/
 │   ├── search.py        # Lyrics Search app
 │   ├── catalog.py       # Persistent catalog and helpers
 │   └── base_app.py      # Shared base class and settings
+├── tests/               # Test suite (pytest)
+│   ├── conftest.py
+│   ├── test_catalog.py
+│   └── test_helpers.py
 ├── .env                 # API token (gitignored)
 ├── .env.example
 ├── menu.py              # macOS menu bar launcher
+├── run.py               # Simple entry point
 ├── LyricsBrowser.spec   # PyInstaller spec (Windows)
 ├── LyricsBrowser-macOS.spec # PyInstaller spec (macOS)
-└── requirements.txt
+├── requirements.txt
+└── requirements-dev.txt # Dev dependencies
 ```
 
 ## Windows Build
