@@ -30,6 +30,7 @@ try:
         TREE_SONG_COLOR,
         TREE_MISSING_COLOR,
         FILTER_PLACEHOLDER_COLOR,
+        LABEL_FG,
         TREE_ARTIST_FONT_SIZE,
         TREE_ALBUM_FONT_SIZE,
         TREE_SONG_FONT_SIZE,
@@ -63,6 +64,7 @@ except ImportError:
         TREE_SONG_COLOR,
         TREE_MISSING_COLOR,
         FILTER_PLACEHOLDER_COLOR,
+        LABEL_FG,
         TREE_ARTIST_FONT_SIZE,
         TREE_ALBUM_FONT_SIZE,
         TREE_SONG_FONT_SIZE,
@@ -1015,6 +1017,7 @@ def main():
     # This avoids dock icon issues on macOS
     root = tb.Window(themename="darkly", iconphoto=None)
     root.title("Lyrics Browser")
+    root.style.configure("TLabel", foreground=LABEL_FG)
     root.style.configure("TButton", background=BTN_BG, foreground=BTN_FG)
     root.style.map(
         "TButton", background=[("active", BTN_BG_ACTIVE), ("disabled", BTN_BG_DISABLED)]
