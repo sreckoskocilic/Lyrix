@@ -31,7 +31,7 @@ THEME_INPUTBG = "#2f2f2f"  # Input field background
 BTN_BG = "#2c437d"  # Normal button background
 BTN_BG_ACTIVE = "#2e2e2e"  # Button background on hover/click
 BTN_BG_DISABLED = "#2a2a2a"  # Disabled button background
-BTN_FG = "#dddddd"  # Button text color
+BTN_FG = "#DCCF9A"  # Button text color
 
 # Catalog tree font sizes
 TREE_ARTIST_FONT_SIZE = 11  # Artist entries
@@ -39,9 +39,9 @@ TREE_ALBUM_FONT_SIZE = 11  # Album entries
 TREE_SONG_FONT_SIZE = 11  # Song entries
 
 # Catalog tree colors (defaults; user can override via color pickers)
-TREE_ARTIST_COLOR = "#cfd424"  # Artist entries
-TREE_ALBUM_COLOR = "#ff8099"  # Album entries
-TREE_SONG_COLOR = "#5bc0de"  # Song entries
+TREE_ARTIST_COLOR = "#DAE000"  # Artist entries
+TREE_ALBUM_COLOR = "#FF7500"  # Album entries
+TREE_SONG_COLOR = "#4E9AB4"  # Song entries
 TREE_MISSING_COLOR = "#6c7086"  # Songs with missing lyrics
 
 # Filter entry placeholder color
