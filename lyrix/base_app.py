@@ -92,6 +92,8 @@ class LyricsBaseApp:
         self.status_var = tk.StringVar()
         self.master.protocol("WM_DELETE_WINDOW", self._on_close)
         self._font_size = self.FONT_SIZE_DEFAULT
+        self.lyrics_window: tk.Text | None = None  # set by subclass
+        self.genius = None  # set by subclass via _create_genius_client()
 
     # ── Font ──────────────────────────────────────────────────────────────────
 
