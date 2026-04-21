@@ -1,11 +1,11 @@
 # Lyrix
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-64%20passed-green.svg)](https://github.com/skocho/lyrix/actions)
+[![Tests](https://img.shields.io/badge/tests-68%20passed-green.svg)](https://github.com/skocho/lyrix/actions)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-green.svg)](https://github.com/skocho/lyrix/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Two ttkbootstrap apps for searching and local browsing song lyrics via the [Genius API](https://genius.com/api-clients).
+A ttkbootstrap app for fetching and managing song lyrics via the [Genius API](https://genius.com/api-clients).
 
 ## Apps
 
@@ -77,27 +77,26 @@ pytest
 
 ```
 lyrix/
-├── lyrix/
-│   ├── __init__.py      # Package init
-│   ├── __main__.py      # Entry point
-│   ├── browser.py       # Lyrics Browser app
-│   ├── browser_actions.py # Browser action methods (update, import, fetch)
-│   ├── browser_search.py  # Browser search methods
-│   ├── search.py        # Lyrics Search app
-│   ├── catalog.py       # Persistent catalog and helpers
-│   └── base_app.py      # Shared base class and settings
-├── tests/               # Test suite (pytest)
-│   ├── conftest.py
-│   ├── test_catalog.py
-│   └── test_helpers.py
-├── .env                 # API token (gitignored)
-├── .env.example
-├── menu.py              # macOS menu bar launcher
-├── run.py               # Simple entry point
-├── LyricsBrowser.spec   # PyInstaller spec (Windows)
-├── LyricsBrowser-macOS.spec # PyInstaller spec (macOS)
-├── requirements.txt
-└── requirements-dev.txt # Dev dependencies
+├── __init__.py           # Package init
+├── __main__.py           # Entry point
+├── browser.py            # Lyrics Browser app
+├── browser_actions.py    # Browser action methods (update, import, fetch)
+├── browser_search.py    # Browser search methods
+├── search.py            # Lyrics Search app
+├── catalog.py           # Persistent catalog and helpers
+└── base_app.py          # Shared base class and settings
+tests/
+├── conftest.py           # pytest path setup
+├── test_catalog.py      # Catalog tests (56)
+└── test_helpers.py     # Helper function tests (12)
+.env                    # API token (gitignored)
+.env.example
+menu.py                 # macOS menu bar launcher
+run.py                 # Simple entry point
+LyricsBrowser.spec     # PyInstaller spec (Windows)
+LyricsBrowser-macOS.spec # PyInstaller spec (macOS)
+requirements.txt
+requirements-dev.txt  # Dev dependencies
 ```
 
 ## Windows Build
