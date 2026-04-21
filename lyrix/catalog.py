@@ -462,25 +462,29 @@ class Catalog:
     def stats(self) -> dict:
         """Return catalog statistics in a single lock acquisition."""
         with self._lock:
-            entries = list(self._data.values())
-            artists = {e["artist"] for e in entries}
-            albums = {(e["artist"], e.get("album", "")) for e in entries}
-            with_lyrics = sum(1 for e in entries if e.get("lyrics", "").strip())
+            artists: set[str] = set()
+            albums: set[tuple[str, str]] = set()
+            with_lyrics = 0
             groups: dict[tuple, int] = {}
-            for key, entry in self._data.items():
-                if not entry.get("lyrics", "").strip():
-                    continue
+            for entry in self._data.values():
+                artists.add(entry["artist"])
+                albums.add((entry["artist"], entry.get("album", "")))
+                has_lyrics = bool(entry.get("lyrics", "").strip())
+                if has_lyrics:
+                    with_lyrics += 1
+                key = self._key(entry["artist"], entry["title"], entry.get("album", ""))
                 parts = key.split("\t")
-                if len(parts) >= 2:
+                if len(parts) >= 2 and has_lyrics:
                     at = (parts[0], parts[1])
                     groups[at] = groups.get(at, 0) + 1
             duplicates = sum(1 for c in groups.values() if c > 1)
+            total = len(self._data)
         return {
             "artists": len(artists),
             "albums": len(albums),
-            "songs": len(entries),
+            "songs": total,
             "with_lyrics": with_lyrics,
-            "without_lyrics": len(entries) - with_lyrics,
+            "without_lyrics": total - with_lyrics,
             "duplicates": duplicates,
         }
 
