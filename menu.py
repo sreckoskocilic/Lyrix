@@ -31,6 +31,13 @@ class LyricsMenuBar(rumps.App):
             None,  # separator before Quit
         ]
 
+    def terminate_(self):
+        for proc in self._procs.values():
+            if proc.poll() is None:
+                proc.terminate()
+                proc.wait()
+        super().terminate_()
+
     def _launch(self, key: str, module: str):
         """Start module as a subprocess; skip if already running."""
         proc = self._procs.get(key)

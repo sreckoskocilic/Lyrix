@@ -164,14 +164,6 @@ class LyricsApp(LyricsBaseApp):
         )
         self._return_cmd = cmd
 
-    def _require_genius_client(self):
-        if self.genius is None:
-            mb.showerror(
-                "Error", "GENIUS_TOKEN is missing, so Genius searches are disabled."
-            )
-            return False
-        return True
-
     def _set_busy(self, busy: bool):
         self._busy = busy
         state, cursor = ("disabled", "watch") if busy else ("normal", "")

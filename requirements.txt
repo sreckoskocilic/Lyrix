@@ -1,5 +1,5 @@
-lyricsgenius
-python-dotenv
-pyglet
-ttkbootstrap
-rumps; sys_platform == "darwin"
+lyricsgenius>=3.0,<4.0
+python-dotenv>=1.0,<2.0
+pyglet>=2.0,<3.0
+ttkbootstrap>=1.0,<2.0
+rumps>=0.4,<1.0; sys_platform == "darwin"

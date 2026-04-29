@@ -258,6 +258,8 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
         self.tree.bind("<Down>", self._on_tree_arrow)
         btn = "<Button-2>" if sys.platform == "darwin" else "<Button-3>"
         self.tree.bind(btn, self._on_tree_right_click)
+        if sys.platform == "darwin":
+            self.tree.bind("<Control-Button-1>", self._on_tree_right_click)
         self.tree.bind("<<TreeviewOpen>>", self._on_tree_open)
         self.tree.bind("<<TreeviewClose>>", self._on_tree_close)
         self._filter_trace_id = self.filter_var.trace_add(
@@ -976,9 +978,13 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
             # the theme itself is applied regardless, so this is safe to ignore.
             pass
         # Update ScrolledText colors to match new theme
-        colors = tb.style.STANDARD_THEMES.get(theme, {}).get("colors", {})
-        bg = colors.get("bg", THEME_BG)
-        selectbg = colors.get("selectbg", THEME_SELECTBG)
+        try:
+            style_colors = self.master.style.colors
+            bg = style_colors.bg
+            selectbg = style_colors.selectbg
+        except AttributeError:
+            bg = THEME_BG
+            selectbg = THEME_SELECTBG
         self.lyrics_window.configure(
             bg=bg,
             fg=self._lyrics_fg,

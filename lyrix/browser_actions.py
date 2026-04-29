@@ -28,7 +28,7 @@ def _build_track_entries(
     entries = []
     for item in tracks:
         num, track = _unpack_track(item)
-        track_num = num if isinstance(num, int) else (getattr(track, "number", 0) or 0)
+        track_num = num if isinstance(num, int) else 0
         entries.append(
             {
                 "artist": artist_name,

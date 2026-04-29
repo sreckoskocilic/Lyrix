@@ -92,14 +92,8 @@ def _extract_name(obj, fallback="Unknown"):
 
 
 def _unpack_track(item):
-    """Return (track_num_or_None, track_obj) from a (num, track) tuple or bare track."""
-    return item if isinstance(item, tuple) else (None, item)
-
-
-def _format_track(item):
-    num, track = _unpack_track(item)
-    prefix = f"{num}. " if num is not None else ""
-    return f"{SEPARATOR}\n{prefix}{track.title}\n{SEPARATOR}\n{track.to_text()}\n\n\n"
+    """Return (track_num, track_obj) from a (num, track) tuple."""
+    return item
 
 
 # ── Catalog ───────────────────────────────────────────────────────────────────
@@ -290,15 +284,18 @@ class Catalog:
     def find_duplicates(self) -> list[dict]:
         """Return entries where the same (artist, title) appears under multiple albums with lyrics."""
         with self._lock:
-            groups: dict[tuple, list[dict]] = {}
-            for key, entry in self._data.items():
-                if not entry.get("lyrics", "").strip():
+            result = []
+            for keys in self._title_index.values():
+                if len(keys) < 2:
                     continue
-                parts = key.split("\t")
-                if len(parts) >= 2:
-                    at = (parts[0], parts[1])
-                    groups.setdefault(at, []).append(entry)
-        return [entries for entries in groups.values() if len(entries) > 1]
+                with_lyrics = [
+                    self._data[k]
+                    for k in keys
+                    if k in self._data and self._data[k].get("lyrics", "").strip()
+                ]
+                if len(with_lyrics) > 1:
+                    result.append(with_lyrics)
+        return result
 
     def remove(self, artist: str, title: str, album: str = ""):
         with self._lock:
@@ -405,21 +402,20 @@ class Catalog:
 
     def reload(self):
         """Re-read the catalog file if it has changed on disk since last load/save."""
-        try:
-            mtime = self._path.stat().st_mtime_ns
-        except OSError:
-            return
-        try:
-            raw = json.loads(self._path.read_text(encoding="utf-8"))
-        except Exception as exc:
-            _log.warning(
-                "Catalog reload failed (%s) — keeping existing in-memory data", exc
-            )
-            return
         with self._lock:
+            try:
+                mtime = self._path.stat().st_mtime_ns
+            except OSError:
+                return
             if mtime <= self._file_mtime:
-                # Our stat() was taken before a concurrent _save() completed;
-                # the file version we read is older than what is already in memory.
+                return
+            try:
+                raw = json.loads(self._path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                _log.warning(
+                    "Catalog reload failed (%s) — keeping existing in-memory data",
+                    exc,
+                )
                 return
             self._data = raw.get("entries", {})
             self._rebuild_index()

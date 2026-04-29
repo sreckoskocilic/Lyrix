@@ -25,15 +25,12 @@ _SORT_LAST = 9999  # sentinel: sort unknown/missing values to the end
 THEME_BG = "#222222"  # Main window / ScrolledText background
 THEME_FG = "#6FA450"  # Default text color (Catppuccin-inspired)
 THEME_SELECTBG = "#555555"  # Text selection background
-THEME_INPUTBG = "#2f2f2f"  # Input field background
 
 # Button colors
 BTN_BG = "#2c437d"  # Normal button background
 BTN_BG_ACTIVE = "#2e2e2e"  # Button background on hover/click
 BTN_BG_DISABLED = "#2a2a2a"  # Disabled button background
 BTN_FG = "#DCCF9A"  # Button text color
-BTN_FG_ACTIVE = "#DCCF9A"  # Button text color on hover/click
-BTN_FG_DISABLED = "#6c7086"  # Disabled button text color
 
 # Catalog tree font sizes
 TREE_ARTIST_FONT_SIZE = 11  # Artist entries
@@ -49,10 +46,6 @@ TREE_MISSING_COLOR = "#6c7086"  # Songs with missing lyrics
 # Filter entry placeholder color
 FILTER_PLACEHOLDER_COLOR = "#6c7086"
 LABEL_FG = "#30F6FF"  # Label foreground color (overrides darkly theme default #ffffff)
-
-# Text widget selection and cursor
-THEME_SELECTFG = "#939393"  # Text selection foreground (selectforeground)
-THEME_CURSOR = "#939393"  # Text insertion cursor (insertbackground)
 
 
 def _setup_logging():
@@ -124,6 +117,8 @@ class LyricsBaseApp:
         self.master.bind_all(f"<{mod}-minus>", lambda e: self._change_font_size(-1))
 
     def _change_font_size(self, delta: int):
+        if self.lyrics_window is None:
+            return
         new_size = max(
             self.FONT_SIZE_MIN, min(self.FONT_SIZE_MAX, self._font_size + delta)
         )
@@ -152,7 +147,7 @@ class LyricsBaseApp:
             return None
         from lyricsgenius import Genius
 
-        return Genius(token, verbose=False, timeout=10)
+        return Genius(token, timeout=10)
 
     def _require_genius_client(self) -> bool:
         if self.genius is None:

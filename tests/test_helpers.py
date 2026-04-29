@@ -5,8 +5,8 @@ from lyrix.catalog import (
     _release_year,
     _format_album_header,
     _format_song_header,
-    _format_track,
     _extract_name,
+    _unpack_track,
     get_resource_path,
 )
 from lyrix.base_app import _year_sort
@@ -34,11 +34,9 @@ class YearParsingTests(unittest.TestCase):
 
 
 class FormattingTests(unittest.TestCase):
-    def test_format_track_with_tuple(self):
-        track = SimpleNamespace(title="Song A", to_text=lambda: "lyrics")
-        text = _format_track((1, track))
-        self.assertIn("1. Song A", text)
-        self.assertIn("lyrics", text)
+    def test_unpack_track(self):
+        track = SimpleNamespace(title="Song A")
+        self.assertEqual(_unpack_track((1, track)), (1, track))
 
     def test_format_song_header_from_song_object(self):
         """_format_song_header produces the same output regardless of the source."""
