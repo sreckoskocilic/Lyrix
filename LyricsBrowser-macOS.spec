@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 # Build on macOS:
-#   pip install pyinstaller lyricsgenius mutagen python-dotenv pyglet
+#   pip install pyinstaller lyricsgenius python-dotenv pyglet ttkbootstrap
 #   pyinstaller LyricsBrowser-macOS.spec
 #
 # To code-sign (optional, required for Gatekeeper without quarantine):
@@ -25,21 +25,18 @@ if os.path.exists(icon_file):
 
 lg_d, lg_b, lg_h = collect_all("lyricsgenius")
 pyg_d, pyg_b, pyg_h = collect_all("pyglet")
-mut_d, mut_b, mut_h = collect_all("mutagen")
 dot_d, dot_b, dot_h = collect_all("dotenv")
 
 a = Analysis(
     ["run.py"],
     pathex=["."],
-    binaries=lg_b + pyg_b + mut_b + dot_b,
-    datas=datas + lg_d + pyg_d + mut_d + dot_d,
+    binaries=lg_b + pyg_b + dot_b,
+    datas=datas + lg_d + pyg_d + dot_d,
     hiddenimports=(
         lg_h
         + pyg_h
-        + mut_h
         + dot_h
         + collect_submodules("lyricsgenius")
-        + collect_submodules("mutagen")
         + [
             "tkinter",
             "tkinter.ttk",
@@ -105,7 +102,7 @@ app = BUNDLE(
     info_plist={
         "CFBundleName": "LyricsBrowser",
         "CFBundleDisplayName": "Lyrics Browser",
-        "CFBundleShortVersionString": "1.5.0",
+        "CFBundleShortVersionString": "1.6.0",
         "CFBundleVersion": "1",
         "NSHighResolutionCapable": True,
         "NSRequiresAquaSystemAppearance": False,  # allows dark mode

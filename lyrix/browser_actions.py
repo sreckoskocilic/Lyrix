@@ -124,7 +124,7 @@ class BrowserActions:
         year = _release_year(ss_album) or (existing or {}).get("year", "")
         track = (existing or {}).get("track", 0)
         ss_title = ss.title.strip()
-        if ss_title != title:
+        if ss_title != title or album_name != album:
             self.catalog.remove(artist, title, album)
         self.catalog.add(artist, ss_title, album_name, year, ss.to_text(), track=track)
         self._refresh_tree()

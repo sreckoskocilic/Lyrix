@@ -1,8 +1,8 @@
 # Lyrix
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-68%20passed-green.svg)](https://github.com/skocho/lyrix/actions)
-[![Coverage](https://img.shields.io/badge/coverage-100%25-green.svg)](https://github.com/skocho/lyrix/actions)
+[![Tests](https://img.shields.io/badge/tests-68%20passed-green.svg)](https://github.com/sreckoskocilic/Lyrix/actions)
+[![Coverage](https://img.shields.io/badge/coverage-100%25-green.svg)](https://github.com/sreckoskocilic/Lyrix/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A ttkbootstrap app for fetching and managing song lyrics via the [Genius API](https://genius.com/api-clients).

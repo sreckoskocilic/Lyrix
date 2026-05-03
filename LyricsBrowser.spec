@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 # Build on Windows:
-#   pip install pyinstaller lyricsgenius mutagen python-dotenv pyglet
+#   pip install pyinstaller lyricsgenius python-dotenv pyglet ttkbootstrap
 #   pyinstaller LyricsBrowser.spec
 
 import os
@@ -14,21 +14,18 @@ if os.path.exists(".env"):
 # collect_all picks up datas, binaries, and hidden imports for dynamic packages
 lg_d, lg_b, lg_h = collect_all("lyricsgenius")
 pyg_d, pyg_b, pyg_h = collect_all("pyglet")
-mut_d, mut_b, mut_h = collect_all("mutagen")
 dot_d, dot_b, dot_h = collect_all("dotenv")
 
 a = Analysis(
     ["run.py"],
     pathex=["."],
-    binaries=lg_b + pyg_b + mut_b + dot_b,
-    datas=datas + lg_d + pyg_d + mut_d + dot_d,
+    binaries=lg_b + pyg_b + dot_b,
+    datas=datas + lg_d + pyg_d + dot_d,
     hiddenimports=(
         lg_h
         + pyg_h
-        + mut_h
         + dot_h
         + collect_submodules("lyricsgenius")
-        + collect_submodules("mutagen")
         + [
             # tkinter extras sometimes missed on Windows
             "tkinter",

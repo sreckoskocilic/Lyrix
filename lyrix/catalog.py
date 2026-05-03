@@ -417,7 +417,12 @@ class Catalog:
                     exc,
                 )
                 return
-            self._data = raw.get("entries", {})
+            data = raw.get("entries", {})
+            for old_key in [k for k in data if k.count("\t") == 1]:
+                entry = data.pop(old_key)
+                album_lower = (entry.get("album") or "").lower().strip()
+                data[f"{old_key}\t{album_lower}"] = entry
+            self._data = data
             self._rebuild_index()
             self._file_mtime = mtime
 
@@ -463,8 +468,13 @@ class Catalog:
             with_lyrics = 0
             groups: dict[tuple, int] = {}
             for entry in self._data.values():
-                artists.add(entry["artist"])
-                albums.add((entry["artist"], entry.get("album", "")))
+                artists.add(entry["artist"].lower().strip())
+                albums.add(
+                    (
+                        entry["artist"].lower().strip(),
+                        (entry.get("album") or "").lower().strip(),
+                    )
+                )
                 has_lyrics = bool(entry.get("lyrics", "").strip())
                 if has_lyrics:
                     with_lyrics += 1

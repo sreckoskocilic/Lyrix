@@ -147,6 +147,7 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
             lambda e: self._cancel_edit() if self._editing else self._clear_filter(),
         )
         self.master.bind_all("<question>", lambda e: self._show_shortcuts())
+        self.master.bind_all("<Key>", self._on_global_key)
 
         self._artist_entry.bind("<Return>", lambda e: self._search_song_lyrics())
         self._song_entry.bind("<Return>", lambda e: self._search_song_lyrics())
@@ -813,6 +814,24 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
             return
         self._filter_focus_in(self._filter_entry)
         self._filter_entry.focus_set()
+
+    def _on_global_key(self, event):
+        if self._filter_entry is None or self._editing:
+            return
+        focus = self.master.focus_get()
+        if focus in (
+            self._filter_entry,
+            self._artist_entry,
+            self._song_entry,
+            self._album_entry,
+            self.lyrics_window,
+        ):
+            return
+        if len(event.char) == 1 and event.char.isprintable():
+            self._filter_focus_in(self._filter_entry)
+            self._filter_entry.focus_set()
+            self._filter_entry.insert("end", event.char)
+            return "break"
 
     # ── Copy to clipboard ─────────────────────────────────────────────────────
 

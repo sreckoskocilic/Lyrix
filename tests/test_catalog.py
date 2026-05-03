@@ -47,6 +47,23 @@ class CatalogTests(unittest.TestCase):
             cat.remove("A", "Song")
             self.assertEqual(len(cat), 0)
 
+    def test_add_to_new_album_removes_old_entry(self):
+        """Simulates the update-song flow: when album changes, old entry must be removed."""
+        with TemporaryDirectory() as tmp:
+            cat_path = Path(tmp) / "catalog.json"
+            cat = Catalog(cat_path)
+            cat.add("A", "Song", "OldAlbum", "2020", "lyrics")
+            self.assertEqual(len(cat), 1)
+
+            # Simulate what browser_actions does: remove old, add with new album
+            cat.remove("A", "Song", "OldAlbum")
+            cat.add("A", "Song", "NewAlbum", "2021", "updated")
+            self.assertEqual(len(cat), 1)
+            self.assertIsNone(cat.get("A", "Song", "OldAlbum"))
+            entry = cat.get("A", "Song", "NewAlbum")
+            self.assertIsNotNone(entry)
+            self.assertEqual(entry["album"], "NewAlbum")
+
     def test_remove_entries_and_year_update(self):
         with TemporaryDirectory() as tmp:
             cat_path = Path(tmp) / "catalog.json"
@@ -212,6 +229,31 @@ class CatalogTests(unittest.TestCase):
             cat_path.unlink()
             cat.reload()
             self.assertEqual(len(cat), 1)  # in-memory data preserved
+
+    def test_reload_migrates_old_two_tab_keys(self):
+        with TemporaryDirectory() as tmp:
+            cat_path = Path(tmp) / "catalog.json"
+            cat = Catalog(cat_path)
+            cat.add("A", "Song", "Album", "2020", "lyrics")
+
+            # Simulate external process writing old 2-tab format
+            data = json.loads(cat_path.read_text())
+            data["entries"]["b\tother"] = {
+                "artist": "B",
+                "title": "Other",
+                "album": "Disc",
+                "year": "",
+                "track": 0,
+                "lyrics": "x",
+                "added": "2024-01-01T00:00:00",
+            }
+            cat_path.write_text(json.dumps(data))
+
+            cat.reload()
+            self.assertEqual(len(cat), 2)
+            entry = cat.get("B", "Other", "Disc")
+            self.assertIsNotNone(entry)
+            self.assertEqual(entry["lyrics"], "x")
 
     def test_reload_skips_when_mtime_unchanged(self):
         with TemporaryDirectory() as tmp:
@@ -660,6 +702,18 @@ class CatalogTests(unittest.TestCase):
             self.assertEqual(len(cat), 2)
             self.assertIsNotNone(cat.find("A", "One"))
             self.assertIsNotNone(cat.find("A", "Two"))
+
+    def test_stats_counts_normalized(self):
+        """stats() should count artists/albums by normalized case, not display case."""
+        with TemporaryDirectory() as tmp:
+            cat_path = Path(tmp) / "catalog.json"
+            cat = Catalog(cat_path)
+            cat.add("Radiohead", "Song1", "OK Computer", "1997", "lyrics")
+            cat.add("radiohead", "Song2", "ok computer", "1997", "lyrics")
+            stats = cat.stats()
+            self.assertEqual(stats["artists"], 1)
+            self.assertEqual(stats["albums"], 1)
+            self.assertEqual(stats["songs"], 2)
 
     def test_load_stat_oserror_is_swallowed(self):
         """OSError on stat() after loading the catalog file must not propagate."""
