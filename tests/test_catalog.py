@@ -447,6 +447,34 @@ class CatalogTests(unittest.TestCase):
             entry = cat.get("Artist", "Song", "Album")
             self.assertIsNotNone(entry)
 
+    def test_migration_save_failure_preserves_data(self):
+        """If _save() fails during migration, data stays loaded in memory."""
+        with TemporaryDirectory() as tmp:
+            cat_path = Path(tmp) / "catalog.json"
+            cat_path.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "entries": {
+                            "artist\tsong": {
+                                "artist": "Artist",
+                                "title": "Song",
+                                "album": "My Album",
+                                "year": "2000",
+                                "track": 0,
+                                "lyrics": "lyrics",
+                                "added": "2024-01-01T00:00:00",
+                            }
+                        },
+                    }
+                )
+            )
+            with patch.object(Catalog, "_save", side_effect=OSError("disk full")):
+                cat = Catalog(cat_path)
+            self.assertEqual(len(cat), 1)
+            entry = cat.get("Artist", "Song", "My Album")
+            self.assertIsNotNone(entry)
+
     def test_remove_with_album_specific(self):
         """remove(artist, title, album) must delete only the exact album variant."""
         with TemporaryDirectory() as tmp:

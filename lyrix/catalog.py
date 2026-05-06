@@ -123,9 +123,12 @@ class Catalog:
                     data[f"{old_key}\t{album_lower}"] = entry
                     needs_save = True
                 self._data = data
-                if needs_save:
-                    self._save()
                 self._rebuild_index()
+                if needs_save:
+                    try:
+                        self._save()
+                    except Exception as exc:
+                        _log.warning("Migration save failed: %s", exc)
                 try:
                     self._file_mtime = self._path.stat().st_mtime_ns
                 except OSError:

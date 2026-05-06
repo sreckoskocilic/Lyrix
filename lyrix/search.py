@@ -311,7 +311,7 @@ class LyricsApp(LyricsBaseApp):
             track_num = num if isinstance(num, int) else 0
             lyrics = track.to_text()
             title = track.title.strip()
-            prefix = f"{num}. " if num is not None else ""
+            prefix = f"{num}. " if num else ""
             tracks_text_parts.append(
                 f"{SEPARATOR}\n{prefix}{title}\n{SEPARATOR}\n{lyrics}\n\n\n"
             )

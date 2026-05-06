@@ -45,10 +45,13 @@ class LyricsMenuBar(rumps.App):
             if proc.poll() is None:
                 return  # still running
             proc.wait()  # reap the zombie before replacing
-        self._procs[key] = subprocess.Popen(
-            [sys.executable, "-m", module],
-            cwd=str(ROOT),
-        )
+        try:
+            self._procs[key] = subprocess.Popen(
+                [sys.executable, "-m", module],
+                cwd=str(ROOT),
+            )
+        except OSError as e:
+            rumps.notification("Lyrix", "Launch failed", str(e))
 
     def _open_search(self, _):
         self._launch("search", "lyrix.search")
