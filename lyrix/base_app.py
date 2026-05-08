@@ -47,6 +47,14 @@ TREE_MISSING_COLOR = "#6c7086"  # Songs with missing lyrics
 FILTER_PLACEHOLDER_COLOR = "#6c7086"
 LABEL_FG = "#30F6FF"  # Label foreground color (overrides darkly theme default #ffffff)
 
+# Color scheme presets: {name: (lyrics_fg, artist, album, song, missing, label)}
+COLOR_SCHEMES = {
+    "classic": ("#6FA450", "#DAE000", "#FF7500", "#4E9AB4", "#6c7086", "#30F6FF"),
+    "sage": ("#a0b48a", "#b8c9a0", "#8a9c72", "#7a8e6a", "#4a4e48", "#6a8a5a"),
+    "moss": ("#b0b490", "#c4c8a0", "#9aa07a", "#88906a", "#4a4c40", "#7a8460"),
+    "forest": ("#90b880", "#8cc07a", "#6a9a5a", "#5a8a4e", "#3a4a36", "#5a8a4e"),
+}
+
 
 def _setup_logging():
     """Configure logging to file with rotation (max 256 KB, keep 1 backup)."""

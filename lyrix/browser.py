@@ -34,6 +34,7 @@ try:
         TREE_ARTIST_FONT_SIZE,
         TREE_ALBUM_FONT_SIZE,
         TREE_SONG_FONT_SIZE,
+        COLOR_SCHEMES,
     )
     from .browser_actions import BrowserActions
     from .browser_search import BrowserSearch
@@ -68,6 +69,7 @@ except ImportError:
         TREE_ARTIST_FONT_SIZE,
         TREE_ALBUM_FONT_SIZE,
         TREE_SONG_FONT_SIZE,
+        COLOR_SCHEMES,
     )
     from browser_actions import BrowserActions  # type: ignore
     from browser_search import BrowserSearch  # type: ignore
@@ -108,6 +110,9 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
             self._current_theme = "darkly"
         self._expanded_artists: set[str] = set(settings.get("expanded_artists", []))
         self._pending_restore: dict | None = settings.get("last_selected") or None
+        self._current_color_scheme: str = settings.get("color_scheme", "classic")
+        if self._current_color_scheme not in COLOR_SCHEMES:
+            self._current_color_scheme = "classic"
         self._filter_trace_id: str | None = None
         self._theme_after_id: str | None = None
 
@@ -131,8 +136,7 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
 
         self.genius = self._create_genius_client(warn=False)
         if self.genius is None:
-            for btn in self._gated_buttons:
-                btn.pack_forget()  # Hide search buttons when no token
+            self._search_toggle_btn.pack_forget()
             for entry in (self._artist_entry, self._song_entry, self._album_entry):
                 entry.configure(state="disabled")
 
@@ -194,48 +198,24 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
         self._theme_combo.pack(side="right")
         self._theme_combo.bind("<<ComboboxSelected>>", self._on_theme_change)
 
+        # Color scheme switcher
+        self._scheme_var = tk.StringVar(value=self._current_color_scheme)
+        self._scheme_combo = ttk.Combobox(
+            header_frame,
+            textvariable=self._scheme_var,
+            values=list(COLOR_SCHEMES.keys()),
+            state="readonly",
+            width=8,
+        )
+        self._scheme_combo.pack(side="right", padx=(0, 4))
+        self._scheme_combo.bind("<<ComboboxSelected>>", self._on_color_scheme_change)
+
+        # Filter at top — primary navigation for large catalogs
         self.filter_var = tk.StringVar()
-        search_frame = ttk.Frame(frame)
-        search_frame.pack(fill="x", pady=(0, 8))
-        search_frame.columnconfigure(1, weight=1)
-
-        ttk.Label(search_frame, text="Artist:").grid(
-            row=0, column=0, sticky="e", padx=(0, 6), pady=3
-        )
-        self._artist_entry = ttk.Entry(search_frame, font=(FONT_NAME, 11))
-        self._artist_entry.grid(row=0, column=1, sticky="ew", pady=3)
-
-        ttk.Label(search_frame, text="Song:").grid(
-            row=1, column=0, sticky="e", padx=(0, 6), pady=3
-        )
-        self._song_entry = ttk.Entry(search_frame, font=(FONT_NAME, 11))
-        self._song_entry.grid(row=1, column=1, sticky="ew", pady=3)
-
-        ttk.Label(search_frame, text="Album:").grid(
-            row=2, column=0, sticky="e", padx=(0, 6), pady=3
-        )
-        self._album_entry = ttk.Entry(search_frame, font=(FONT_NAME, 11))
-        self._album_entry.grid(row=2, column=1, sticky="ew", pady=3)
-
-        btn_frame = ttk.Frame(frame)
-        btn_frame.pack(fill="x", pady=(0, 8))
-        self._search_song_btn = ttk.Button(
-            btn_frame, text="Song Lyrics", command=self._search_song_lyrics
-        )
-        self._search_song_btn.pack(side="left", padx=(0, 6), expand=True, fill="x")
-        self._search_album_btn = ttk.Button(
-            btn_frame, text="Album Lyrics", command=self._search_album_lyrics
-        )
-        self._search_album_btn.pack(side="left", padx=(0, 6), expand=True, fill="x")
-        self._search_artist_btn = ttk.Button(
-            btn_frame, text="Artist", command=self._search_artist_songs
-        )
-        self._search_artist_btn.pack(side="left", expand=True, fill="x")
-
         self._filter_entry = ttk.Entry(
             frame, textvariable=self.filter_var, font=(FONT_NAME, 10)
         )
-        self._filter_entry.pack(fill="x", pady=(0, 4))
+        self._filter_entry.pack(fill="x", pady=(4, 4))
         self._filter_entry.bind(
             "<FocusIn>", lambda e: self._filter_focus_in(self._filter_entry)
         )
@@ -246,6 +226,7 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
         self._filter_entry.insert(0, "Filter…")
         self._filter_entry.configure(foreground=FILTER_PLACEHOLDER_COLOR)
 
+        # Tree view — main interaction area, gets maximum space
         tree_frame = ttk.Frame(frame)
         tree_frame.pack(fill="both", expand=True)
         self.tree = ttk.Treeview(tree_frame, show="tree", selectmode="browse")
@@ -288,17 +269,47 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
             foreground=self._tree_missing_color,
         )
 
-        btn_row = ttk.Frame(frame)
-        btn_row.pack(fill="x", pady=(4, 2))
-        ttk.Button(btn_row, text="Remove", command=self._remove_selected).pack(
-            side="left", padx=(0, 4), expand=True, fill="x"
+        # Collapsible Genius search section
+        self._search_visible = False
+        self._search_toggle_btn = ttk.Button(
+            frame, text="▸ Search Genius…", command=self._toggle_search_panel
         )
-        self._update_btn = ttk.Button(
-            btn_row, text="Update", command=self._update_selected
+        self._search_toggle_btn.pack(fill="x", pady=(4, 0))
+
+        self._search_frame = ttk.Frame(frame)
+        self._search_frame.columnconfigure(1, weight=1)
+        ttk.Label(self._search_frame, text="Artist:").grid(
+            row=0, column=0, sticky="e", padx=(0, 6), pady=2
         )
-        self._update_btn.pack(side="left", padx=(0, 4), expand=True, fill="x")
-        self._save_btn = ttk.Button(btn_row, text="Save", command=self._save_lyrics)
-        self._save_btn.pack(side="left", expand=True, fill="x")
+        self._artist_entry = ttk.Entry(self._search_frame, font=(FONT_NAME, 11))
+        self._artist_entry.grid(row=0, column=1, sticky="ew", pady=2)
+        ttk.Label(self._search_frame, text="Song:").grid(
+            row=1, column=0, sticky="e", padx=(0, 6), pady=2
+        )
+        self._song_entry = ttk.Entry(self._search_frame, font=(FONT_NAME, 11))
+        self._song_entry.grid(row=1, column=1, sticky="ew", pady=2)
+        ttk.Label(self._search_frame, text="Album:").grid(
+            row=2, column=0, sticky="e", padx=(0, 6), pady=2
+        )
+        self._album_entry = ttk.Entry(self._search_frame, font=(FONT_NAME, 11))
+        self._album_entry.grid(row=2, column=1, sticky="ew", pady=2)
+        search_btn_frame = ttk.Frame(self._search_frame)
+        search_btn_frame.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(2, 0))
+        self._search_song_btn = ttk.Button(
+            search_btn_frame, text="Song Lyrics", command=self._search_song_lyrics
+        )
+        self._search_song_btn.pack(side="left", padx=(0, 4), expand=True, fill="x")
+        self._search_album_btn = ttk.Button(
+            search_btn_frame, text="Album Lyrics", command=self._search_album_lyrics
+        )
+        self._search_album_btn.pack(side="left", padx=(0, 4), expand=True, fill="x")
+        self._search_artist_btn = ttk.Button(
+            search_btn_frame, text="Artist", command=self._search_artist_songs
+        )
+        self._search_artist_btn.pack(side="left", expand=True, fill="x")
+
+        self._update_btn = ttk.Button(frame, width=0)
+        self._save_btn = ttk.Button(frame, width=0)
 
         self._gated_buttons = [
             self._search_song_btn,
@@ -315,8 +326,35 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
 
         return frame
 
+    def _toggle_search_panel(self):
+        if self._search_visible:
+            self._search_frame.pack_forget()
+            self._search_toggle_btn.configure(text="▸ Search Genius…")
+            self._search_visible = False
+        else:
+            self._search_frame.pack(
+                after=self._search_toggle_btn, fill="x", pady=(2, 0)
+            )
+            self._search_toggle_btn.configure(text="▾ Search Genius…")
+            self._search_visible = True
+            self._artist_entry.focus_set()
+
     def _build_viewer_panel(self, parent):
         frame = ttk.Frame(parent, padding=(8, 0, 0, 0))
+
+        # Compact song info header
+        self._song_title_var = tk.StringVar()
+        self._song_meta_var = tk.StringVar()
+        ttk.Label(
+            frame,
+            textvariable=self._song_title_var,
+            font=(FONT_NAME, 12, "bold"),
+        ).pack(anchor="w")
+        ttk.Label(
+            frame,
+            textvariable=self._song_meta_var,
+            font=(FONT_NAME, 9),
+        ).pack(anchor="w", pady=(0, 4))
 
         self.lyrics_window = st.ScrolledText(
             frame,
@@ -328,35 +366,13 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
             insertbackground=self._lyrics_fg,
             borderwidth=0,
             relief="flat",
-            padx=8,
+            padx=12,
             pady=8,
             state="disabled",
         )
         self.lyrics_window.pack(fill="both", expand=True)
-        ctrl_frame = ttk.Frame(frame)
-        ctrl_frame.pack(fill="x", pady=(4, 0))
-        self._edit_btn = ttk.Button(
-            ctrl_frame,
-            text="Edit",
-            width=10,
-            command=self._toggle_edit,
-            state="disabled",
-        )
-        self._edit_btn.pack(side="right")
-        self._copy_btn = ttk.Button(
-            ctrl_frame,
-            text="Copy",
-            width=10,
-            command=self._copy_lyrics,
-            state="disabled",
-        )
-        self._copy_btn.pack(side="right", padx=(0, 4))
-        ttk.Button(
-            ctrl_frame, text="Text Color", width=10, command=self._pick_fg_color
-        ).pack(side="left")
-        ttk.Button(
-            ctrl_frame, text="Tree Color", width=10, command=self._pick_tree_color
-        ).pack(side="left", padx=(4, 0))
+        self._edit_btn = ttk.Button(frame, width=0)
+        self._copy_btn = ttk.Button(frame, width=0)
         return frame
 
     def _pick_fg_color(self):
@@ -667,10 +683,22 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
     def _show_entry(self, entry: dict):
         album_str = entry.get("album") or "Unknown album"
         year_str = entry.get("year", "")
-        self._set_output(
-            _format_song_header(entry["artist"], entry["title"], album_str, year_str)
-            + entry["lyrics"]
-        )
+        self._song_title_var.set(entry["title"])
+        meta = entry["artist"]
+        if album_str:
+            meta += f" · {album_str}"
+        if year_str:
+            meta += f" ({year_str})"
+        self._song_meta_var.set(meta)
+        if self._editing:
+            self._set_output(
+                _format_song_header(
+                    entry["artist"], entry["title"], album_str, year_str
+                )
+                + entry["lyrics"]
+            )
+        else:
+            self._set_output(entry.get("lyrics", ""))
 
     # ── Settings persistence ──────────────────────────────────────────────────
 
@@ -705,6 +733,7 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
         data = super()._collect_settings(data)
         data.setdefault("sash", {})[type(self).__name__] = self._paned.sashpos(0)
         data["expanded_artists"] = list(self._expanded_artists)
+        data["color_scheme"] = self._current_color_scheme
         # Save last selected song
         if self._current_entry:
             data["last_selected"] = {
@@ -902,16 +931,24 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
                 return
             self._editing = True
             self._edit_btn.configure(text="Save")
+            e = self._current_entry
+            album_str = e.get("album") or "Unknown album"
+            year_str = e.get("year", "")
+            self._set_output(
+                _format_song_header(e["artist"], e["title"], album_str, year_str)
+                + e.get("lyrics", "")
+            )
             self.lyrics_window.configure(state="normal")
             self.lyrics_window.focus_set()
         else:
             self._save_edit()
 
     def _cancel_edit(self):
+        was_editing = self._editing
         self._editing = False
         self._edit_btn.configure(text="Edit")
         self.lyrics_window.configure(state="disabled")
-        if self._current_entry:
+        if self._current_entry and was_editing:
             self._show_entry(self._current_entry)
 
     def _save_edit(self):
@@ -1014,6 +1051,44 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
         # Save theme preference
         data = self._read_settings()
         data["theme"] = theme
+        self._write_settings(data)
+
+    # ── Color scheme switcher ─────────────────────────────────────────────────
+
+    def _on_color_scheme_change(self, _event=None):
+        scheme = self._scheme_var.get()
+        if scheme not in COLOR_SCHEMES:
+            return
+        self._scheme_combo.event_generate("<Escape>")
+        self._apply_color_scheme(scheme)
+
+    def _apply_color_scheme(self, scheme: str):
+        lyrics_fg, artist, album, song, missing, label = COLOR_SCHEMES[scheme]
+        self._current_color_scheme = scheme
+        self._lyrics_fg = lyrics_fg
+        self._tree_song_color = song
+        self._tree_album_color = album
+        self._tree_missing_color = missing
+
+        self.tree.tag_configure("artist", foreground=artist)
+        self.tree.tag_configure("album", foreground=album)
+        self.tree.tag_configure("song", foreground=song)
+        self.tree.tag_configure("missing", foreground=missing)
+
+        self.lyrics_window.configure(
+            fg=lyrics_fg,
+            selectforeground=lyrics_fg,
+            insertbackground=lyrics_fg,
+        )
+
+        self.master.style.configure("TLabel", foreground=label)
+
+        data = self._read_settings()
+        data["color_scheme"] = scheme
+        data["lyrics_fg"] = lyrics_fg
+        data["tree_song_color"] = song
+        data["tree_album_color"] = album
+        data["tree_missing_color"] = missing
         self._write_settings(data)
 
     # ── Keyboard shortcuts reference ───────────────────────────────────────────

@@ -1,7 +1,7 @@
 # Lyrix
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-68%20passed-green.svg)](https://github.com/sreckoskocilic/Lyrix/actions)
+[![Tests](https://img.shields.io/badge/tests-72%20passed-green.svg)](https://github.com/sreckoskocilic/Lyrix/actions)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-green.svg)](https://github.com/sreckoskocilic/Lyrix/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -87,7 +87,7 @@ lyrix/
 └── base_app.py          # Shared base class and settings
 tests/
 ├── conftest.py           # pytest path setup
-├── test_catalog.py      # Catalog tests (56)
+├── test_catalog.py      # Catalog tests (60)
 └── test_helpers.py     # Helper function tests (12)
 .env                    # API token (gitignored)
 .env.example
