@@ -53,6 +53,9 @@ COLOR_SCHEMES = {
     "sage": ("#a0b48a", "#b8c9a0", "#8a9c72", "#7a8e6a", "#4a4e48", "#6a8a5a"),
     "moss": ("#b0b490", "#c4c8a0", "#9aa07a", "#88906a", "#4a4c40", "#7a8460"),
     "forest": ("#90b880", "#8cc07a", "#6a9a5a", "#5a8a4e", "#3a4a36", "#5a8a4e"),
+    "gruvbox": ("#ebdbb2", "#fabd2f", "#fe8019", "#83a598", "#504945", "#b8bb26"),
+    "hiberbee": ("#ffd866", "#FFB900", "#EE7762", "#5efbef", "#525150", "#92d923"),
+    "matrix": ("#4a9e4a", "#6abf6a", "#3d8a3d", "#5aaa5a", "#264026", "#5cc05c"),
 }
 
 
@@ -138,7 +141,10 @@ class LyricsBaseApp:
     def _restore_font_size(self, settings: dict | None = None):
         if settings is None:
             settings = self._read_settings()
-        self._font_size = settings.get("font_size", self.FONT_SIZE_DEFAULT)
+        self._font_size = max(
+            self.FONT_SIZE_MIN,
+            min(self.FONT_SIZE_MAX, settings.get("font_size", self.FONT_SIZE_DEFAULT)),
+        )
 
     # ── Genius client ─────────────────────────────────────────────────────────
 

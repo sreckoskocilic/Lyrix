@@ -353,6 +353,8 @@ class BrowserActions:
     # ── Fetch Missing ─────────────────────────────────────────────────────────
 
     def _fetch_missing(self):
+        if not self._require_genius_client() or self._busy:
+            return
         missing = [
             e for e in self.catalog.all_entries() if not e.get("lyrics", "").strip()
         ]

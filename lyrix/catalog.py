@@ -163,10 +163,7 @@ class Catalog:
             except OSError:
                 pass
         except Exception:
-            try:
-                tmp.unlink()
-            except OSError:
-                pass
+            tmp.unlink(missing_ok=True)
             raise
 
     @staticmethod

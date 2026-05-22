@@ -5,53 +5,37 @@
 [![Coverage](https://img.shields.io/badge/coverage-100%25-green.svg)](https://github.com/sreckoskocilic/Lyrix/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A ttkbootstrap app for fetching and managing song lyrics via the [Genius API](https://genius.com/api-clients).
+A desktop app for fetching and managing song lyrics via the [Genius API](https://genius.com/api-clients). Built with ttkbootstrap.
 
 ## Apps
 
-### Lyrics Search
-Simple search interface. Enter artist + song or artist + album, fetch lyrics, and optionally save to a text file. Results are automatically added to the local catalog.
+**Lyrics Search** — enter artist + song or artist + album, get lyrics. Results go into the local catalog automatically.
 
-### Lyrics Browser
-Full catalog manager with a tree view (artist → album → song). Supports:
-- **Song / Album / Artist search** — fetch and import lyrics directly from the browser
-- **Import All Releases** — import every album for a selected artist
-- **Update** — re-fetch lyrics for a selected song, album, or artist
-- **Fetch Missing Lyrics** — fill in lyrics for catalog entries that have none
-- **Remove** — remove a song, album, or artist from the catalog
-- **Edit / Copy** — inline-edit or copy lyrics to clipboard
-- Filter box for searching the catalog by artist, album, or title
+**Lyrics Browser** — the full catalog manager. Tree view organized by artist, album, and song. You can search and import from Genius, re-fetch outdated lyrics, import an artist's entire discography, fill in missing lyrics across the catalog, edit lyrics inline, filter by name, and remove entries. Undo works for deletions (Cmd+Z, 20-item stack). A few color schemes and themes to pick from.
+
+Keyboard shortcuts: Cmd+F (filter), Cmd+E (export), Cmd+M (fetch missing), Cmd+I (stats), Cmd+Z (undo), Cmd+/- (font size), Esc (clear filter or cancel edit), ? (shortcut help).
 
 ## Setup
 
 ```sh
 pip install -r requirements.txt
-pip install -r requirements-dev.txt  # For development/testing
+cp .env.example .env  # then add your token
 ```
 
-Copy `.env.example` to `.env` and add your token:
+Get a Genius API token at https://genius.com/api-clients and put it in `.env`:
 
 ```
 GENIUS_TOKEN=your_token_here
 ```
 
-Get a token at https://genius.com/api-clients.
-
-The optional font **Roboto Mono for Powerline** (`Roboto Mono for Powerline.ttf`) can be placed in the project directory for a nicer UI. The apps fall back to the system monospace font if it's absent.
+If you have **Roboto Mono for Powerline** (`Roboto Mono for Powerline.ttf`) in the project directory, the app uses it. Otherwise it falls back to the system monospace font.
 
 ## Running
 
 ```sh
-python -m lyrix.browser   # Lyrics Browser
-python -m lyrix.search    # Lyrics Search
 python -m lyrix            # Lyrics Browser (default)
-python run.py             # Alias for default app
-```
-
-On macOS, `menu.py` provides a menu bar launcher (requires `pip install rumps`):
-
-```sh
-python menu.py
+python -m lyrix.search     # Lyrics Search
+python menu.py             # macOS menu bar launcher (needs rumps)
 ```
 
 ## Testing
@@ -61,60 +45,24 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
+100% coverage on core code (catalog, helpers). UI files are excluded from coverage and tested manually.
+
 ## Data
 
-| File | Purpose |
-|------|---------|
-| `lyrics_catalog.json` | Persistent catalog of fetched lyrics (gitignored) |
-| `settings.json` | Window geometry and sash position (gitignored) |
-| `lyrix.log` | Application log file (warnings and errors) |
+All data lives in `~/.lyrix/` (macOS/Linux) or `%APPDATA%\Lyrix\` (Windows):
 
-**Data locations:**
-- **macOS/Linux**: `~/.lyrix/`
-- **Windows**: `%APPDATA%\Lyrix\`
+| File | What it is |
+|------|------------|
+| `lyrics_catalog.json` | All fetched lyrics |
+| `settings.json` | Window state, theme, colors, font size |
+| `lyrix.log` | Warnings and errors |
 
-## Project structure
-
-```
-lyrix/
-├── __init__.py           # Package init
-├── __main__.py           # Entry point
-├── browser.py            # Lyrics Browser app
-├── browser_actions.py    # Browser action methods (update, import, fetch)
-├── browser_search.py    # Browser search methods
-├── search.py            # Lyrics Search app
-├── catalog.py           # Persistent catalog and helpers
-└── base_app.py          # Shared base class and settings
-tests/
-├── conftest.py           # pytest path setup
-├── test_catalog.py      # Catalog tests (60)
-└── test_helpers.py     # Helper function tests (12)
-.env                    # API token (gitignored)
-.env.example
-menu.py                 # macOS menu bar launcher
-run.py                 # Simple entry point
-LyricsBrowser.spec     # PyInstaller spec (Windows)
-LyricsBrowser-macOS.spec # PyInstaller spec (macOS)
-requirements.txt
-requirements-dev.txt  # Dev dependencies
-```
-
-## Windows Build
+## Building
 
 ```sh
 pip install pyinstaller
-pyinstaller LyricsBrowser.spec
+pyinstaller LyricsBrowser.spec          # Windows → dist/LyricsBrowser.exe
+pyinstaller LyricsBrowser-macOS.spec    # macOS → dist/LyricsBrowser.app
 ```
 
-Produces a single `dist/LyricsBrowser.exe`. If a `.env` file exists in the project directory at build time it is bundled into the executable; otherwise set `GENIUS_TOKEN` as an environment variable at runtime.
-
-## macOS Build
-
-```sh
-pip install pyinstaller
-pyinstaller LyricsBrowser-macOS.spec
-```
-
-Produces `dist/LyricsBrowser.app`.
-
-The catalog and settings files are stored in the standard data directory (`~/.lyrix/` on macOS/Linux, `%APPDATA%\Lyrix\` on Windows).
+If `.env` exists at build time, the token gets baked into the binary. Otherwise set `GENIUS_TOKEN` as an env var at runtime.

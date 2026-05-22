@@ -137,6 +137,7 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
         self.genius = self._create_genius_client(warn=False)
         if self.genius is None:
             self._search_toggle_btn.pack_forget()
+            self._update_btn.configure(state="disabled")
             for entry in (self._artist_entry, self._song_entry, self._album_entry):
                 entry.configure(state="disabled")
 
@@ -186,29 +187,17 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
             header_frame, textvariable=self.catalog_count_var, font=(FONT_NAME, 9)
         ).pack(side="left", padx=(8, 0))
 
-        # Theme switcher
-        self._theme_var = tk.StringVar(value=self._current_theme)
-        self._theme_combo = ttk.Combobox(
-            header_frame,
-            textvariable=self._theme_var,
-            values=self.VALID_THEMES,
-            state="readonly",
-            width=10,
+        # Gear button for appearance settings
+        self._gear_btn = ttk.Button(
+            header_frame, text="⚙", width=3, command=self._toggle_settings
         )
-        self._theme_combo.pack(side="right")
-        self._theme_combo.bind("<<ComboboxSelected>>", self._on_theme_change)
+        self._gear_btn.pack(side="right")
 
-        # Color scheme switcher
+        # Appearance settings (built lazily on first gear click)
+        self._settings_visible = False
+        self._settings_frame = None
+        self._catalog_frame = frame
         self._scheme_var = tk.StringVar(value=self._current_color_scheme)
-        self._scheme_combo = ttk.Combobox(
-            header_frame,
-            textvariable=self._scheme_var,
-            values=list(COLOR_SCHEMES.keys()),
-            state="readonly",
-            width=8,
-        )
-        self._scheme_combo.pack(side="right", padx=(0, 4))
-        self._scheme_combo.bind("<<ComboboxSelected>>", self._on_color_scheme_change)
 
         # Filter at top — primary navigation for large catalogs
         self.filter_var = tk.StringVar()
@@ -228,7 +217,6 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
 
         # Tree view — main interaction area, gets maximum space
         tree_frame = ttk.Frame(frame)
-        tree_frame.pack(fill="both", expand=True)
         self.tree = ttk.Treeview(tree_frame, show="tree", selectmode="browse")
         vsb = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=vsb.set)
@@ -275,6 +263,7 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
             frame, text="▸ Search Genius…", command=self._toggle_search_panel
         )
         self._search_toggle_btn.pack(fill="x", pady=(4, 0))
+        tree_frame.pack(fill="both", expand=True)
 
         self._search_frame = ttk.Frame(frame)
         self._search_frame.columnconfigure(1, weight=1)
@@ -308,23 +297,40 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
         )
         self._search_artist_btn.pack(side="left", expand=True, fill="x")
 
-        self._update_btn = ttk.Button(frame, width=0)
-        self._save_btn = ttk.Button(frame, width=0)
-
         self._gated_buttons = [
             self._search_song_btn,
             self._search_album_btn,
             self._search_artist_btn,
-            self._update_btn,
         ]
 
         self._progress = ttk.Progressbar(frame, mode="indeterminate")
-        self._progress.pack(fill="x", pady=(4, 0))
-        ttk.Label(frame, textvariable=self.status_var, font=(FONT_NAME, 9)).pack(
-            anchor="w", pady=(2, 0)
+        self._status_label = ttk.Label(
+            frame, textvariable=self.status_var, font=(FONT_NAME, 9)
         )
+        self._status_label.pack(anchor="w", pady=(2, 0))
 
         return frame
+
+    def _toggle_settings(self):
+        if self._settings_visible:
+            self._settings_frame.pack_forget()
+            self._settings_visible = False
+            return
+        if self._settings_frame is None:
+            self._settings_frame = ttk.Frame(self._catalog_frame, padding=(0, 2, 0, 2))
+            self._scheme_combo = ttk.Combobox(
+                self._settings_frame,
+                textvariable=self._scheme_var,
+                values=list(COLOR_SCHEMES.keys()),
+                state="readonly",
+                width=12,
+            )
+            self._scheme_combo.pack(fill="x")
+            self._scheme_combo.bind(
+                "<<ComboboxSelected>>", self._on_color_scheme_change
+            )
+        self._settings_frame.pack(before=self._filter_entry, fill="x", pady=(2, 4))
+        self._settings_visible = True
 
     def _toggle_search_panel(self):
         if self._search_visible:
@@ -356,6 +362,24 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
             font=(FONT_NAME, 9),
         ).pack(anchor="w", pady=(0, 4))
 
+        action_bar = ttk.Frame(frame)
+        action_bar.pack(fill="x", pady=(0, 4))
+        self._edit_btn = ttk.Button(
+            action_bar, text="Edit", command=self._toggle_edit, state="disabled"
+        )
+        self._edit_btn.pack(side="left", padx=(0, 4))
+        self._copy_btn = ttk.Button(
+            action_bar, text="Copy", command=self._copy_lyrics, state="disabled"
+        )
+        self._copy_btn.pack(side="left", padx=(0, 4))
+        self._update_btn = ttk.Button(
+            action_bar, text="Update", command=self._update_selected, state="disabled"
+        )
+        self._update_btn.pack(side="left", padx=(0, 4))
+        self._save_btn = ttk.Button(action_bar, text="Save", command=self._save_lyrics)
+        self._save_btn.pack(side="left")
+        self._gated_buttons.append(self._update_btn)
+
         self.lyrics_window = st.ScrolledText(
             frame,
             font=(FONT_NAME, self._font_size),
@@ -371,8 +395,6 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
             state="disabled",
         )
         self.lyrics_window.pack(fill="both", expand=True)
-        self._edit_btn = ttk.Button(frame, width=0)
-        self._copy_btn = ttk.Button(frame, width=0)
         return frame
 
     def _pick_fg_color(self):
@@ -715,10 +737,11 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
                 pass
         # Force-close the theme dropdown before destroy; an open popdown causes
         # a TclError when the window is destroyed while the dropdown is visible.
-        try:
-            self._theme_combo.event_generate("<Escape>")
-        except Exception:
-            pass
+        if self._settings_frame is not None:
+            try:
+                self._scheme_combo.event_generate("<Escape>")
+            except Exception:
+                pass
         super()._on_close()
 
     def _on_paned_configure(self, event):
@@ -751,10 +774,12 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
         if busy:
             if self._editing:
                 self._cancel_edit()
+            self._progress.pack(before=self._status_label, fill="x", pady=(4, 0))
             self._progress.start(15)
             state = "disabled"
         else:
             self._progress.stop()
+            self._progress.pack_forget()
             if self.genius is not None:
                 state = "normal"
             else:
@@ -780,9 +805,15 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
         genius_available = self.genius is not None and not self._busy
         menu_has_items = False
         if "song" in tags or "missing" in tags:
+            if genius_available:
+                menu.add_command(label="Update Lyrics", command=self._update_selected)
+                menu.add_separator()
             menu.add_command(label="Remove Song", command=self._remove_selected)
             menu_has_items = True
         elif "album" in tags:
+            if genius_available:
+                menu.add_command(label="Update Album", command=self._update_selected)
+                menu.add_separator()
             menu.add_command(label="Remove Album", command=self._remove_selected)
             menu_has_items = True
         elif "artist" in tags:
@@ -790,6 +821,7 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
                 menu.add_command(
                     label="Import All Releases", command=self._import_artist_releases
                 )
+                menu.add_command(label="Update Artist", command=self._update_selected)
                 menu.add_separator()
             menu.add_command(label="Remove Artist", command=self._remove_selected)
             menu_has_items = True
