@@ -5,15 +5,15 @@
 [![Coverage](https://img.shields.io/badge/coverage-100%25-green.svg)](https://github.com/sreckoskocilic/Lyrix/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A desktop app for fetching and managing song lyrics via the [Genius API](https://genius.com/api-clients). Built with ttkbootstrap.
+Desktop lyrics manager. Pulls lyrics from the [Genius API](https://genius.com/api-clients), stores them locally, lets you browse and edit. Built with ttkbootstrap.
 
 ## Apps
 
-**Lyrics Search** — enter artist + song or artist + album, get lyrics. Results go into the local catalog automatically.
+**Lyrics Search** — type an artist + song or artist + album, get lyrics back. Everything you fetch gets saved to the local catalog.
 
-**Lyrics Browser** — the full catalog manager. Tree view organized by artist, album, and song. You can search and import from Genius, re-fetch outdated lyrics, import an artist's entire discography, fill in missing lyrics across the catalog, edit lyrics inline, filter by name, and remove entries. Undo works for deletions (Cmd+Z, 20-item stack). A few color schemes and themes to pick from.
+**Lyrics Browser** — the full catalog. Tree view by artist, album, song. Search Genius, import whole discographies, re-fetch stale lyrics, fill in gaps across the catalog, edit inline, filter by name, delete stuff. Undo for deletions goes 20 deep (Cmd+Z). Comes with a few color schemes and themes.
 
-Keyboard shortcuts: Cmd+F (filter), Cmd+E (export), Cmd+M (fetch missing), Cmd+I (stats), Cmd+Z (undo), Cmd+/- (font size), Esc (clear filter or cancel edit), ? (shortcut help).
+Shortcuts: Cmd+F (filter), Cmd+E (export), Cmd+M (fetch missing), Cmd+I (stats), Cmd+Z (undo), Cmd+/- (font size), Esc (clear filter or cancel edit), ? (shortcut help).
 
 ## Setup
 
@@ -28,7 +28,7 @@ Get a Genius API token at https://genius.com/api-clients and put it in `.env`:
 GENIUS_TOKEN=your_token_here
 ```
 
-If you have **Roboto Mono for Powerline** (`Roboto Mono for Powerline.ttf`) in the project directory, the app uses it. Otherwise it falls back to the system monospace font.
+If you drop **Roboto Mono for Powerline** (`Roboto Mono for Powerline.ttf`) in the project directory, the app picks it up. Otherwise it uses whatever monospace font your system has.
 
 ## Running
 
@@ -45,11 +45,11 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-100% coverage on core code (catalog, helpers). UI files are excluded from coverage and tested manually.
+100% coverage on core code (catalog, helpers). UI is excluded from coverage and tested by hand.
 
 ## Data
 
-All data lives in `~/.lyrix/` (macOS/Linux) or `%APPDATA%\Lyrix\` (Windows):
+Everything lives in `~/.lyrix/` (macOS/Linux) or `%APPDATA%\Lyrix\` (Windows):
 
 | File | What it is |
 |------|------------|
