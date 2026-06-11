@@ -30,7 +30,6 @@ try:
         _format_album_header,
         _format_song_header,
         _release_year,
-        _unpack_track,
         get_resource_path,
     )
 except ImportError:
@@ -55,7 +54,6 @@ except ImportError:
         _format_album_header,
         _format_song_header,
         _release_year,
-        _unpack_track,
         get_resource_path,
     )
 
@@ -307,7 +305,7 @@ class LyricsApp(LyricsBaseApp):
         tracks_text_parts = []
         entries_to_add = []
         for item in ss.tracks:
-            num, track = _unpack_track(item)
+            num, track = item
             track_num = num if isinstance(num, int) else 0
             lyrics = track.to_text()
             title = track.title.strip()

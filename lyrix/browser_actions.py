@@ -11,14 +11,13 @@ try:
         SONGS_CATEGORY,
         _extract_name,
         _release_year,
-        _unpack_track,
     )
 except ImportError:
     import sys
     from pathlib import Path
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from catalog import SONGS_CATEGORY, _extract_name, _release_year, _unpack_track  # type: ignore
+    from catalog import SONGS_CATEGORY, _extract_name, _release_year  # type: ignore
 
 
 def _build_track_entries(
@@ -27,7 +26,7 @@ def _build_track_entries(
     """Build catalog entry dicts from a Genius album tracks list."""
     entries = []
     for item in tracks:
-        num, track = _unpack_track(item)
+        num, track = item
         track_num = num if isinstance(num, int) else 0
         entries.append(
             {

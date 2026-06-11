@@ -91,11 +91,6 @@ def _extract_name(obj, fallback="Unknown"):
     return getattr(obj, "name", None) or fallback
 
 
-def _unpack_track(item):
-    """Return (track_num, track_obj) from a (num, track) tuple."""
-    return item
-
-
 # ── Catalog ───────────────────────────────────────────────────────────────────
 
 

@@ -114,7 +114,6 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
         if self._current_color_scheme not in COLOR_SCHEMES:
             self._current_color_scheme = "classic"
         self._filter_trace_id: str | None = None
-        self._theme_after_id: str | None = None
 
         self._set_app_icon()
         self._load_custom_font()
@@ -154,8 +153,12 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
         self.master.bind_all("<question>", lambda e: self._show_shortcuts())
         self.master.bind_all("<Key>", self._on_global_key)
 
-        self._artist_entry.bind("<Return>", lambda e: self._search_song_lyrics())
-        self._song_entry.bind("<Return>", lambda e: self._search_song_lyrics())
+        self._artist_entry.bind(
+            "<Return>", lambda e: self._search_song_lyrics() if not self._busy else None
+        )
+        self._song_entry.bind(
+            "<Return>", lambda e: self._search_song_lyrics() if not self._busy else None
+        )
 
         self._refresh_tree()
 
@@ -396,30 +399,6 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
         )
         self.lyrics_window.pack(fill="both", expand=True)
         return frame
-
-    def _pick_fg_color(self):
-        from tkinter.colorchooser import askcolor
-
-        color = askcolor(color=self._lyrics_fg, title="Choose text color")[1]
-        if color:
-            self._lyrics_fg = color
-            self.lyrics_window.configure(
-                fg=color, selectforeground=color, insertbackground=color
-            )
-            data = self._read_settings()
-            data["lyrics_fg"] = color
-            self._write_settings(data)
-
-    def _pick_tree_color(self):
-        from tkinter.colorchooser import askcolor
-
-        color = askcolor(color=self._tree_song_color, title="Choose tree song color")[1]
-        if color:
-            self._tree_song_color = color
-            self.tree.tag_configure("song", foreground=color)
-            data = self._read_settings()
-            data["tree_song_color"] = color
-            self._write_settings(data)
 
     # ── Filter placeholder ────────────────────────────────────────────────────
 
@@ -728,11 +707,6 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
         if self._filter_trace_id is not None:
             try:
                 self.filter_var.trace_remove("write", self._filter_trace_id)
-            except Exception:
-                pass
-        if self._theme_after_id is not None:
-            try:
-                self.master.after_cancel(self._theme_after_id)
             except Exception:
                 pass
         # Force-close the theme dropdown before destroy; an open popdown causes
@@ -1044,46 +1018,6 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
     # ── Theme switcher ─────────────────────────────────────────────────────────
 
     VALID_THEMES = ["darkly", "superhero", "solar", "cyborg", "vapor"]
-
-    def _on_theme_change(self, _event=None):
-        theme = self._theme_var.get()
-        if theme not in self.VALID_THEMES:
-            return
-        # Close combobox dropdown before theme change to avoid TclError;
-        # cancel any pending theme switch so rapid clicks don't stack.
-        if self._theme_after_id is not None:
-            self.master.after_cancel(self._theme_after_id)
-        self._theme_combo.event_generate("<Escape>")
-        self._theme_after_id = self.master.after(50, self._apply_theme, theme)
-
-    def _apply_theme(self, theme: str):
-        self._current_theme = theme
-        try:
-            self.master.style.theme_use(theme)
-        except tk.TclError:
-            # ttkbootstrap tries to style the combobox popdown widget which may
-            # not exist yet (dropdown never opened) or may already be destroyed;
-            # the theme itself is applied regardless, so this is safe to ignore.
-            pass
-        # Update ScrolledText colors to match new theme
-        try:
-            style_colors = self.master.style.colors
-            bg = style_colors.bg
-            selectbg = style_colors.selectbg
-        except AttributeError:
-            bg = THEME_BG
-            selectbg = THEME_SELECTBG
-        self.lyrics_window.configure(
-            bg=bg,
-            fg=self._lyrics_fg,
-            selectbackground=selectbg,
-            selectforeground=self._lyrics_fg,
-            insertbackground=self._lyrics_fg,
-        )
-        # Save theme preference
-        data = self._read_settings()
-        data["theme"] = theme
-        self._write_settings(data)
 
     # ── Color scheme switcher ─────────────────────────────────────────────────
 
