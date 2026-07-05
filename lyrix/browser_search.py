@@ -5,11 +5,11 @@ import tkinter.messagebox as mb
 
 try:
     from .catalog import (
-        SEPARATOR,
         SONGS_CATEGORY,
         _extract_name,
         _format_album_header,
         _format_song_header,
+        _format_track_block,
         _release_year,
     )
 except ImportError:
@@ -18,11 +18,11 @@ except ImportError:
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from catalog import (
-        SEPARATOR,
         SONGS_CATEGORY,
         _extract_name,
         _format_album_header,
         _format_song_header,
+        _format_track_block,
         _release_year,
     )  # type: ignore
 
@@ -158,10 +158,7 @@ class BrowserSearch:
             track_num = num if isinstance(num, int) else 0
             lyrics = track.to_text()
             title = track.title.strip()
-            prefix = f"{num}. " if num is not None else ""
-            tracks_text_parts.append(
-                f"{SEPARATOR}\n{prefix}{title}\n{SEPARATOR}\n{lyrics}\n\n\n"
-            )
+            tracks_text_parts.append(_format_track_block(num, title, lyrics))
             entries_to_add.append(
                 {
                     "artist": artist_name,

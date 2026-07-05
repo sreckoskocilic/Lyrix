@@ -85,6 +85,12 @@ def _format_album_header(artist: str, album: str, year: str) -> str:
     )
 
 
+def _format_track_block(num, title: str, lyrics: str) -> str:
+    """Build one track block (number, title, lyrics) for album display."""
+    prefix = f"{num}. " if num else ""
+    return f"{SEPARATOR}\n{prefix}{title}\n{SEPARATOR}\n{lyrics}\n\n\n"
+
+
 def _extract_name(obj, fallback="Unknown"):
     if isinstance(obj, dict):
         return obj.get("name") or fallback

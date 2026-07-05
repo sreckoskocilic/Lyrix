@@ -24,11 +24,11 @@ try:
         Catalog,
         CATALOG_PATH,
         FONT_NAME,
-        SEPARATOR,
         SONGS_CATEGORY,
         _extract_name,
         _format_album_header,
         _format_song_header,
+        _format_track_block,
         _release_year,
         get_resource_path,
     )
@@ -48,11 +48,11 @@ except ImportError:
         Catalog,
         CATALOG_PATH,
         FONT_NAME,
-        SEPARATOR,
         SONGS_CATEGORY,
         _extract_name,
         _format_album_header,
         _format_song_header,
+        _format_track_block,
         _release_year,
         get_resource_path,
     )
@@ -273,13 +273,9 @@ class LyricsApp(LyricsBaseApp):
         artist_name = tracks[0]["artist"]
         album_name = tracks[0].get("album") or "Unknown album"
         year_str = tracks[0].get("year", "")
-        parts = []
-        for e in tracks:
-            num = e.get("track")
-            prefix = f"{num}. " if num else ""
-            parts.append(
-                f"{SEPARATOR}\n{prefix}{e['title']}\n{SEPARATOR}\n{e['lyrics']}\n\n\n"
-            )
+        parts = [
+            _format_track_block(e.get("track"), e["title"], e["lyrics"]) for e in tracks
+        ]
         self._set_output(
             _format_album_header(artist_name, album_name, year_str) + "".join(parts)
         )
@@ -309,10 +305,7 @@ class LyricsApp(LyricsBaseApp):
             track_num = num if isinstance(num, int) else 0
             lyrics = track.to_text()
             title = track.title.strip()
-            prefix = f"{num}. " if num else ""
-            tracks_text_parts.append(
-                f"{SEPARATOR}\n{prefix}{title}\n{SEPARATOR}\n{lyrics}\n\n\n"
-            )
+            tracks_text_parts.append(_format_track_block(num, title, lyrics))
             entries_to_add.append(
                 {
                     "artist": artist_name,

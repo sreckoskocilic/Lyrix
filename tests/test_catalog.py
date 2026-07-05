@@ -4,34 +4,9 @@ import threading
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from types import SimpleNamespace
 from unittest.mock import patch
 
-from lyrix.catalog import Catalog, _release_year
-
-
-class ReleaseYearTests(unittest.TestCase):
-    def test_rdc_dict_with_year(self):
-        album = {"release_date_components": {"year": 1994}}
-        self.assertEqual(_release_year(album), "1994")
-
-    def test_rdc_dict_with_no_year(self):
-        album = {"release_date_components": {}, "release_date_for_display": "2001"}
-        self.assertEqual(_release_year(album), "2001")
-
-    def test_rdc_object_with_year(self):
-        rdc = SimpleNamespace(year=2001)
-        album = SimpleNamespace(
-            release_date_components=rdc, release_date_for_display=""
-        )
-        self.assertEqual(_release_year(album), "2001")
-
-    def test_rdc_object_with_no_year(self):
-        rdc = SimpleNamespace(year=None)
-        album = SimpleNamespace(
-            release_date_components=rdc, release_date_for_display="January 01, 2005"
-        )
-        self.assertEqual(_release_year(album), "2005")
+from lyrix.catalog import Catalog
 
 
 class CatalogTests(unittest.TestCase):

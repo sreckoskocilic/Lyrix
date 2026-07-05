@@ -7,7 +7,7 @@ import tkinter as tk
 import tkinter.filedialog as fd
 import tkinter.messagebox as mb
 import tkinter.scrolledtext as st
-from collections import deque
+from collections import Counter, deque
 from pathlib import Path
 from tkinter import ttk
 
@@ -96,6 +96,7 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
         self._editing = False
         self._filter_entry: ttk.Entry | None = None
         self._album_iid_name: dict[str, str] = {}  # treeview iid → raw album name
+        self._artist_iid_name: dict[str, str] = {}  # treeview iid → raw artist name
 
         # Load color settings before building UI
         settings = self._read_settings()
@@ -353,17 +354,27 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
 
         # Compact song info header
         self._song_title_var = tk.StringVar()
-        self._song_meta_var = tk.StringVar()
         ttk.Label(
             frame,
             textvariable=self._song_title_var,
-            font=(FONT_NAME, 12, "bold"),
+            font=(FONT_NAME, 17, "bold"),
         ).pack(anchor="w")
-        ttk.Label(
+        # Meta line: muted labels + colored values (Artist/Album/Year).
+        self._meta_text = tk.Text(
             frame,
-            textvariable=self._song_meta_var,
+            height=1,
+            borderwidth=0,
+            highlightthickness=0,
+            bg=THEME_BG,
             font=(FONT_NAME, 9),
-        ).pack(anchor="w", pady=(0, 4))
+            wrap="none",
+            cursor="arrow",
+            takefocus=0,
+        )
+        self._meta_text.tag_configure("lbl", foreground=self._tree_missing_color)
+        self._meta_text.tag_configure("val", foreground=LABEL_FG)
+        self._meta_text.configure(state="disabled")
+        self._meta_text.pack(anchor="w", fill="x", pady=(0, 4))
 
         action_bar = ttk.Frame(frame)
         action_bar.pack(fill="x", pady=(0, 4))
@@ -498,8 +509,13 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
             ),
         )
 
+        # Song counts per artist and per (artist, album) for tree node labels.
+        artist_counts = Counter(t[1] for t in entries)
+        album_counts = Counter(t[4] for t in entries)
+
         self.tree.delete(*self.tree.get_children())
         self._album_iid_name.clear()
+        self._artist_iid_name.clear()
         artist_nodes: dict[str, str] = {}
         album_nodes: dict[tuple, str] = {}
 
@@ -509,16 +525,18 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
             year = canon_year.get(bk, "")
 
             if al not in artist_nodes:
-                artist_nodes[al] = self.tree.insert(
+                iid = self.tree.insert(
                     "",
                     "end",
-                    text=artist,
+                    text=f"{artist}  ({artist_counts[al]})",
                     open=(artist in self._expanded_artists),
                     tags=("artist",),
                 )
+                artist_nodes[al] = iid
+                self._artist_iid_name[iid] = artist
             if bk not in album_nodes:
                 year_part = f" ({year})" if year else ""
-                album_label = f"{album}{year_part}"
+                album_label = f"{album}{year_part}  ({album_counts[bk]})"
                 album_iid = self.tree.insert(
                     artist_nodes[al],
                     "end",
@@ -552,9 +570,7 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
             )
 
         # Prune stale artist names from the cache (e.g. after removing an artist)
-        self._expanded_artists &= {
-            self.tree.item(iid, "text") for iid in artist_nodes.values()
-        }
+        self._expanded_artists &= set(self._artist_iid_name.values())
 
         # Restore the last-viewed song if no filter is active.
         # _pending_restore carries the saved selection from settings and is consumed once
@@ -582,6 +598,8 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
                     self._edit_btn.configure(state="normal")
                     self._copy_btn.configure(state="normal")
                     self._show_entry(entry)
+            if self._current_entry is None and not self._editing:
+                self._show_placeholder()
 
     def _on_tree_select(self, _event=None):
         sel = self.tree.selection()
@@ -606,12 +624,12 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
     def _on_tree_open(self, _event=None):
         item = self.tree.focus()
         if item and "artist" in self.tree.item(item, "tags"):
-            self._expanded_artists.add(self.tree.item(item, "text"))
+            self._expanded_artists.add(self._artist_iid_name.get(item, ""))
 
     def _on_tree_close(self, _event=None):
         item = self.tree.focus()
         if item and "artist" in self.tree.item(item, "tags"):
-            self._expanded_artists.discard(self.tree.item(item, "text"))
+            self._expanded_artists.discard(self._artist_iid_name.get(item, ""))
 
     def _on_tree_arrow(self, _event=None):
         """Handle arrow key navigation in tree view."""
@@ -669,7 +687,9 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
                 self._set_status(f"Removed {len(songs)} songs", duration_ms=4000)
 
         elif "artist" in tags:
-            artist_name = self.tree.item(item, "text")
+            artist_name = self._artist_iid_name.get(item) or self.tree.item(
+                item, "text"
+            )
             entries = self.catalog.find_by_artist(artist_name)
             count = len(entries)
             if count and mb.askyesno(
@@ -681,16 +701,24 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
                 self._refresh_tree()
                 self._set_status(f"Removed {removed} songs", duration_ms=4000)
 
+    def _set_meta(self, artist: str, album: str, year: str):
+        """Render the meta line as muted labels + colored values."""
+        parts = [("Artist ", "lbl"), (artist, "val")]
+        if album:
+            parts += [("   Album ", "lbl"), (album, "val")]
+        if year:
+            parts += [("   Year ", "lbl"), (year, "val")]
+        self._meta_text.configure(state="normal")
+        self._meta_text.delete("1.0", tk.END)
+        for text, tag in parts:
+            self._meta_text.insert(tk.END, text, tag)
+        self._meta_text.configure(state="disabled")
+
     def _show_entry(self, entry: dict):
         album_str = entry.get("album") or "Unknown album"
         year_str = entry.get("year", "")
         self._song_title_var.set(entry["title"])
-        meta = entry["artist"]
-        if album_str:
-            meta += f" · {album_str}"
-        if year_str:
-            meta += f" ({year_str})"
-        self._song_meta_var.set(meta)
+        self._set_meta(entry["artist"], album_str, year_str)
         if self._editing:
             self._set_output(
                 _format_song_header(
@@ -700,6 +728,26 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
             )
         else:
             self._set_output(entry.get("lyrics", ""))
+
+    def _show_placeholder(self):
+        """Show a hint in the viewer when nothing is selected (empty state)."""
+        self._song_title_var.set("")
+        self._meta_text.configure(state="normal")
+        self._meta_text.delete("1.0", tk.END)
+        self._meta_text.configure(state="disabled")
+        self.lyrics_window.configure(state="normal")
+        self.lyrics_window.delete("1.0", tk.END)
+        self.lyrics_window.tag_configure(
+            "placeholder", justify="center", foreground=self._tree_missing_color
+        )
+        self.lyrics_window.insert(
+            "1.0",
+            "\n\n\n"
+            "← Odaberi pjesmu iz kataloga\n\n"
+            "ili otvori  ▸ Search Genius…  za novu pretragu\n",
+            "placeholder",
+        )
+        self.lyrics_window.configure(state="disabled")
 
     # ── Settings persistence ──────────────────────────────────────────────────
 
@@ -1048,6 +1096,8 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
         )
 
         self.master.style.configure("TLabel", foreground=label)
+        self._meta_text.tag_configure("lbl", foreground=missing)
+        self._meta_text.tag_configure("val", foreground=label)
 
         data = self._read_settings()
         data["color_scheme"] = scheme

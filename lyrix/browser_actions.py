@@ -82,7 +82,9 @@ class BrowserActions:
             ).start()
 
         elif "artist" in tags:
-            artist_name = self.tree.item(item, "text")
+            artist_name = self._artist_iid_name.get(item) or self.tree.item(
+                item, "text"
+            )
             album_map: dict[str, list] = {}
             for e in self.catalog.find_by_artist(artist_name):
                 alb = e.get("album") or ""
@@ -267,7 +269,7 @@ class BrowserActions:
         tags = self.tree.item(item, "tags")
         if "artist" not in tags:
             return
-        artist_name = self.tree.item(item, "text")
+        artist_name = self._artist_iid_name.get(item) or self.tree.item(item, "text")
         self._set_busy(True)
         self._set_status(f"Fetching releases for: {artist_name}…")
         threading.Thread(
