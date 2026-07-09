@@ -7,6 +7,7 @@ import tkinter.messagebox as mb
 _log = logging.getLogger(__name__)
 
 try:
+    from . import discovery
     from .catalog import (
         SONGS_CATEGORY,
         _extract_name,
@@ -17,6 +18,7 @@ except ImportError:
     from pathlib import Path
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    import discovery  # type: ignore
     from catalog import SONGS_CATEGORY, _extract_name, _release_year  # type: ignore
 
 
@@ -211,6 +213,9 @@ class BrowserActions:
                         continue
                     updated += len(ss.tracks)
                     continue
+            # Skip songs not filed under an album (singles / unknown album)
+            if not album_name or album_name.lower() == "unknown album":
+                continue
             # Fallback: update songs individually, batch writes at end
             song_entries: list[dict] = []
             title_changes: list[tuple] = []
@@ -279,51 +284,39 @@ class BrowserActions:
         ).start()
 
     def _run_import_all_albums(self, artist: str):
-        """Shared: discover all albums via search_artist then import each via search_album."""
-        self._ui(self._set_status, f"Fetching songs for: {artist}…")
+        """Discover official studio albums via MusicBrainz, import each via Genius search_album."""
+        self._ui(self._set_status, f"Finding studio albums for: {artist}…")
+        _log.info("Import all albums: discovering studio albums for %s", artist)
         try:
-            artist_obj = self.genius.search_artist(artist, per_page=50)
+            artist_name, albums = discovery.studio_albums(
+                artist, is_cancelled=lambda: self._closing
+            )
         except Exception as e:
             self._ui(self._set_busy, False)
-            self._ui(mb.showerror, "Error", f"Could not search artist:\n{e}")
+            self._ui(mb.showerror, "Error", f"Could not fetch album list:\n{e}")
             return
-        if not artist_obj:
-            self._ui(self._set_busy, False)
-            self._ui(self._set_status, f"Artist not found: {artist}", 4000)
-            return
-
-        artist_name = artist_obj.name
-
-        seen_ids: set = set()
-        albums: list[dict] = []
-        for song in artist_obj.songs:
-            album = getattr(song, "album", None)
-            if not album or not isinstance(album, dict):
-                continue
-            aid = album.get("id")
-            if aid and aid not in seen_ids:
-                seen_ids.add(aid)
-                albums.append(album)
 
         if not albums:
             self._ui(self._set_busy, False)
-            self._ui(self._set_status, f"No albums found for: {artist_name}", 4000)
+            self._ui(
+                self._set_status, f"No studio albums found for: {artist_name}", 4000
+            )
             return
 
         existing = self.catalog.all_artist_album_pairs()
+        _log.info("Discovered %d studio albums for %s", len(albums), artist_name)
 
         added = skipped = failed = 0
         for i, album in enumerate(albums, 1):
             if self._closing:
                 break
-            album_name = (album.get("name") or "").strip()
-            if not album_name:
-                continue
+            album_name = album["title"]
             key = (artist_name.lower().strip(), album_name.lower().strip())
             if key in existing:
                 skipped += 1
                 continue
             self._ui(self._set_status, f"[{i}/{len(albums)}] Importing: {album_name}…")
+            _log.info("[%d/%d] Importing album: %s", i, len(albums), album_name)
             try:
                 ss = self.genius.search_album(album_name, artist_name)
             except Exception as exc:
@@ -335,7 +328,7 @@ class BrowserActions:
             if not ss or not ss.tracks:
                 failed += 1
                 continue
-            year = _release_year(ss) or ""
+            year = _release_year(ss) or album.get("year") or ""
             entries = _build_track_entries(ss.tracks, artist_name, album_name, year)
             if entries:
                 self.catalog.add_many(entries)
@@ -349,6 +342,7 @@ class BrowserActions:
             msg += f", {skipped} albums skipped"
         if failed:
             msg += f", {failed} failed"
+        _log.info("Import done for %s: %s", artist_name, msg)
         self._ui(self._set_status, msg, 6000)
 
     # ── Fetch Missing ─────────────────────────────────────────────────────────

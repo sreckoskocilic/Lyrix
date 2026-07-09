@@ -66,7 +66,7 @@ def _setup_logging():
     _BASE_DIR.mkdir(parents=True, exist_ok=True)
 
     logging.basicConfig(
-        level=logging.ERROR,
+        level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
             logging.handlers.RotatingFileHandler(
