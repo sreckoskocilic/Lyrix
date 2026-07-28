@@ -1,15 +1,15 @@
 import unittest
 from types import SimpleNamespace
 
+from lyrix.base_app import _year_sort
 from lyrix.catalog import (
-    _release_year,
+    _extract_name,
     _format_album_header,
     _format_song_header,
     _format_track_block,
-    _extract_name,
+    _release_year,
     get_resource_path,
 )
-from lyrix.base_app import _year_sort
 
 
 class YearParsingTests(unittest.TestCase):

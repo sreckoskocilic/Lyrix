@@ -1,5 +1,6 @@
 """Lyrics Browser app — catalog manager with tree view."""
 
+import contextlib
 import difflib
 import json
 import sys
@@ -15,70 +16,70 @@ import ttkbootstrap as tb
 
 try:
     from .base_app import (
-        LyricsBaseApp,
-        THEME_BG,
-        THEME_FG,
-        THEME_SELECTBG,
-        _year_sort,
         _SORT_LAST,
         BTN_BG,
         BTN_BG_ACTIVE,
         BTN_BG_DISABLED,
         BTN_FG,
-        TREE_ARTIST_COLOR,
-        TREE_ALBUM_COLOR,
-        TREE_SONG_COLOR,
-        TREE_MISSING_COLOR,
+        COLOR_SCHEMES,
         FILTER_PLACEHOLDER_COLOR,
         LABEL_FG,
-        TREE_ARTIST_FONT_SIZE,
+        THEME_BG,
+        THEME_FG,
+        THEME_SELECTBG,
+        TREE_ALBUM_COLOR,
         TREE_ALBUM_FONT_SIZE,
+        TREE_ARTIST_COLOR,
+        TREE_ARTIST_FONT_SIZE,
+        TREE_MISSING_COLOR,
+        TREE_SONG_COLOR,
         TREE_SONG_FONT_SIZE,
-        COLOR_SCHEMES,
+        LyricsBaseApp,
+        _year_sort,
     )
     from .browser_actions import BrowserActions
     from .browser_search import BrowserSearch
     from .catalog import (
-        Catalog,
         CATALOG_PATH,
         FONT_NAME,
         SEPARATOR,
         SONGS_CATEGORY,
+        Catalog,
         _format_song_header,
         get_resource_path,
     )
 except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from base_app import (  # type: ignore
-        LyricsBaseApp,
-        THEME_BG,
-        THEME_FG,
-        THEME_SELECTBG,
-        _year_sort,
         _SORT_LAST,
         BTN_BG,
         BTN_BG_ACTIVE,
         BTN_BG_DISABLED,
         BTN_FG,
-        TREE_ARTIST_COLOR,
-        TREE_ALBUM_COLOR,
-        TREE_SONG_COLOR,
-        TREE_MISSING_COLOR,
+        COLOR_SCHEMES,
         FILTER_PLACEHOLDER_COLOR,
         LABEL_FG,
-        TREE_ARTIST_FONT_SIZE,
+        THEME_BG,
+        THEME_FG,
+        THEME_SELECTBG,
+        TREE_ALBUM_COLOR,
         TREE_ALBUM_FONT_SIZE,
+        TREE_ARTIST_COLOR,
+        TREE_ARTIST_FONT_SIZE,
+        TREE_MISSING_COLOR,
+        TREE_SONG_COLOR,
         TREE_SONG_FONT_SIZE,
-        COLOR_SCHEMES,
+        LyricsBaseApp,
+        _year_sort,
     )
     from browser_actions import BrowserActions  # type: ignore
     from browser_search import BrowserSearch  # type: ignore
     from catalog import (  # type: ignore
-        Catalog,
         CATALOG_PATH,
         FONT_NAME,
         SEPARATOR,
         SONGS_CATEGORY,
+        Catalog,
         _format_song_header,
         get_resource_path,
     )
@@ -753,17 +754,13 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
 
     def _on_close(self):
         if self._filter_trace_id is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self.filter_var.trace_remove("write", self._filter_trace_id)
-            except Exception:
-                pass
         # Force-close the theme dropdown before destroy; an open popdown causes
         # a TclError when the window is destroyed while the dropdown is visible.
         if self._settings_frame is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._scheme_combo.event_generate("<Escape>")
-            except Exception:
-                pass
         super()._on_close()
 
     def _on_paned_configure(self, event):
@@ -1065,7 +1062,7 @@ class LyricsBrowser(LyricsBaseApp, BrowserActions, BrowserSearch):
 
     # ── Theme switcher ─────────────────────────────────────────────────────────
 
-    VALID_THEMES = ["darkly", "superhero", "solar", "cyborg", "vapor"]
+    VALID_THEMES = ("darkly", "superhero", "solar", "cyborg", "vapor")
 
     # ── Color scheme switcher ─────────────────────────────────────────────────
 

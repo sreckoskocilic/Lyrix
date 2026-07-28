@@ -11,20 +11,20 @@ import ttkbootstrap as tb
 
 try:
     from .base_app import (
-        LyricsBaseApp,
-        THEME_BG,
-        THEME_FG,
-        THEME_SELECTBG,
         BTN_BG,
         BTN_BG_ACTIVE,
         BTN_BG_DISABLED,
         BTN_FG,
+        THEME_BG,
+        THEME_FG,
+        THEME_SELECTBG,
+        LyricsBaseApp,
     )
     from .catalog import (
-        Catalog,
         CATALOG_PATH,
         FONT_NAME,
         SONGS_CATEGORY,
+        Catalog,
         _extract_name,
         _format_album_header,
         _format_song_header,
@@ -35,20 +35,20 @@ try:
 except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from base_app import (
-        LyricsBaseApp,
-        THEME_BG,
-        THEME_FG,
-        THEME_SELECTBG,
         BTN_BG,
         BTN_BG_ACTIVE,
         BTN_BG_DISABLED,
         BTN_FG,
+        THEME_BG,
+        THEME_FG,
+        THEME_SELECTBG,
+        LyricsBaseApp,
     )  # type: ignore
     from catalog import (  # type: ignore
-        Catalog,
         CATALOG_PATH,
         FONT_NAME,
         SONGS_CATEGORY,
+        Catalog,
         _extract_name,
         _format_album_header,
         _format_song_header,

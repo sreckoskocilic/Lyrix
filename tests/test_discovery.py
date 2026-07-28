@@ -79,9 +79,9 @@ class GetJsonTests(unittest.TestCase):
                 "urlopen",
                 side_effect=urllib.error.URLError("down"),
             ),
+            self.assertRaises(urllib.error.URLError),
         ):
-            with self.assertRaises(urllib.error.URLError):
-                discovery._get_json("http://x", "UA", retries=1, backoff=0)
+            discovery._get_json("http://x", "UA", retries=1, backoff=0)
 
 
 class ResolveArtistTests(unittest.TestCase):

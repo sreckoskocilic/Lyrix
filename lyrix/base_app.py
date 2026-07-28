@@ -6,13 +6,18 @@ import sys
 import tkinter as tk
 
 try:
-    from .catalog import ENV_ABS_PATH, FONT_NAME, _BASE_DIR, get_resource_path
+    from .catalog import _BASE_DIR, ENV_ABS_PATH, FONT_NAME, get_resource_path
 except ImportError:
-    from pathlib import Path as _Path
     import sys as _sys
+    from pathlib import Path as _Path
 
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
-    from catalog import ENV_ABS_PATH, FONT_NAME, _BASE_DIR, get_resource_path  # type: ignore
+    from catalog import (  # type: ignore
+        _BASE_DIR,
+        ENV_ABS_PATH,
+        FONT_NAME,
+        get_resource_path,
+    )
 
 _SETTINGS_PATH = _BASE_DIR / "settings.json"
 LOG_PATH = _BASE_DIR / "lyrix.log"
@@ -105,7 +110,6 @@ class LyricsBaseApp:
 
     def _set_app_icon(self):
         """No-op - dock icon handled by macOS bundle."""
-        pass
 
     def _load_custom_font(self):
         font_path = get_resource_path("Roboto Mono for Powerline.ttf")

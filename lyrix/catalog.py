@@ -59,7 +59,8 @@ def _release_year(album_data) -> str:
         return release_date
     for fmt in ("%B %d, %Y", "%B %Y"):
         try:
-            return str(datetime.strptime(release_date, fmt).year)
+            # Genius release dates carry no timezone; only the year is used.
+            return str(datetime.strptime(release_date, fmt).year)  # noqa: DTZ007
         except ValueError:
             continue
     return ""
@@ -215,7 +216,8 @@ class Catalog:
                 "year": year or "",
                 "track": track,  # track number within album; 0 = unknown
                 "lyrics": lyrics,
-                "added": existing_added or datetime.now().isoformat(timespec="seconds"),
+                "added": existing_added
+                or datetime.now().astimezone().isoformat(timespec="seconds"),
             }
             if is_new:
                 parts = key.split("\t")
@@ -229,7 +231,7 @@ class Catalog:
         """Add multiple entries in a single save, avoiding per-track JSON writes."""
         if not entries:
             return
-        now = datetime.now().isoformat(timespec="seconds")
+        now = datetime.now().astimezone().isoformat(timespec="seconds")
         with self._lock:
             for e in entries:
                 key = self._key(e["artist"], e["title"], e.get("album", ""))
