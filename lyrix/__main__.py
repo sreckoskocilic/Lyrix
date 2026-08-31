@@ -1,3 +1,5 @@
-from .browser import main
+import sys
 
-main()
+from .ui.app import main
+
+sys.exit(main())

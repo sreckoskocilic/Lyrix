@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Lyrix app icon: a verse — the amber bar is a [Section] label, the green
+       bars are lines of lyrics. Colours are the app palette (theme.py). -->
+  <defs>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#26261e"/>
+      <stop offset="1" stop-color="#121210"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="115" fill="url(#ground)"/>
+  <rect x="116" y="128" width="132" height="40" rx="20" fill="#c98a4b"/>
+  <rect x="116" y="200" width="280" height="40" rx="20" fill="#8fb96f"/>
+  <rect x="116" y="272" width="222" height="40" rx="20" fill="#8fb96f"/>
+  <rect x="116" y="344" width="264" height="40" rx="20" fill="#8fb96f"/>
+</svg>

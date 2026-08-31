@@ -19,9 +19,16 @@ else:
 
 CATALOG_PATH = _BASE_DIR / "lyrics_catalog.json"
 
-SEPARATOR = "=" * 40
-FONT_NAME = "Roboto Mono for Powerline"
 SONGS_CATEGORY = "Songs"
+_SORT_LAST = 9999  # sentinel: sort unknown/missing values to the end
+
+
+def _year_sort(year_str: str) -> int:
+    """Convert a year string to a sort key. Unknown/missing years sort last."""
+    try:
+        return int(year_str or 0) or _SORT_LAST
+    except (ValueError, TypeError):
+        return _SORT_LAST
 
 
 def get_resource_path(relative_path):
@@ -64,32 +71,6 @@ def _release_year(album_data) -> str:
         except ValueError:
             continue
     return ""
-
-
-def _format_song_header(artist: str, title: str, album: str, year: str) -> str:
-    """Build a song header block from plain strings."""
-    year_suffix = f" ({year})" if year else ""
-    return (
-        f"{SEPARATOR}\n"
-        f"Artist: {artist}\n"
-        f"Song: {title}\n"
-        f"Album: {album}{year_suffix}\n"
-        f"{SEPARATOR}\n\n"
-    )
-
-
-def _format_album_header(artist: str, album: str, year: str) -> str:
-    """Build an album header block from plain strings."""
-    year_suffix = f" ({year})" if year else ""
-    return (
-        f"{SEPARATOR}\nArtist: {artist}\nAlbum: {album}{year_suffix}\n{SEPARATOR}\n\n"
-    )
-
-
-def _format_track_block(num, title: str, lyrics: str) -> str:
-    """Build one track block (number, title, lyrics) for album display."""
-    prefix = f"{num}. " if num else ""
-    return f"{SEPARATOR}\n{prefix}{title}\n{SEPARATOR}\n{lyrics}\n\n\n"
 
 
 def _extract_name(obj, fallback="Unknown"):
@@ -258,24 +239,6 @@ class Catalog:
         with self._lock:
             return self._data.get(self._key(artist, title, album))
 
-    def find(self, artist: str, title: str):
-        """Return the first entry matching artist+title across any album.
-
-        Prefers entries that carry lyrics. Use this instead of get() when the
-        album name is not known (e.g. cache-check in the search UI)."""
-        at = (artist.lower().strip(), title.lower().strip())
-        with self._lock:
-            keys = self._title_index.get(at, [])
-            if not keys:
-                return None
-            matches = [self._data[k] for k in keys if k in self._data]
-            if not matches:
-                return None
-            for m in matches:
-                if m.get("lyrics", "").strip():
-                    return m
-            return matches[0]
-
     def find_album(self, artist: str, album: str) -> list[dict]:
         """Return all entries for a given (artist, album) pair."""
         al = artist.lower().strip()
@@ -284,66 +247,19 @@ class Catalog:
             keys = self._artist_album_index.get((al, alb), [])
             return [self._data[k] for k in keys if k in self._data]
 
-    def find_duplicates(self) -> list[dict]:
-        """Return entries where the same (artist, title) appears under multiple albums with lyrics."""
+    def remove(self, artist: str, title: str, album: str):
         with self._lock:
-            result = []
-            for keys in self._title_index.values():
-                if len(keys) < 2:
-                    continue
-                with_lyrics = [
-                    self._data[k]
-                    for k in keys
-                    if k in self._data and self._data[k].get("lyrics", "").strip()
-                ]
-                if len(with_lyrics) > 1:
-                    result.append(with_lyrics)
-        return result
-
-    def remove(self, artist: str, title: str, album: str = ""):
-        with self._lock:
-            if album:
-                key = self._key(artist, title, album)
-                if key in self._data:
-                    parts = key.split("\t")
-                    at = (parts[0], parts[1])
-                    aa = (parts[0], parts[2])
-                    self._index_remove_key(self._title_index, at, key)
-                    self._index_remove_key(self._artist_album_index, aa, key)
-                    del self._data[key]
-                    self._save()
-            else:
-                at = (artist.lower().strip(), title.lower().strip())
-                keys = self._title_index.get(at, [])
-                for k in keys:
-                    if k in self._data:
-                        del self._data[k]
-                    kparts = k.split("\t")
-                    aa = (kparts[0], kparts[2] if len(kparts) > 2 else "")
-                    self._index_remove_key(self._artist_album_index, aa, k)
-                if keys:
-                    del self._title_index[at]
-                    self._save()
-
-    def remove_entries(self, pairs: list) -> int:
-        """Remove multiple (artist, title) pairs in a single save, deleting ALL album variants."""
-        removed = 0
-        with self._lock:
-            for artist, title in pairs:
-                at = (artist.lower().strip(), title.lower().strip())
-                keys = self._title_index.get(at, [])
-                for k in keys:
-                    if k in self._data:
-                        del self._data[k]
-                    kparts = k.split("\t")
-                    aa = (kparts[0], kparts[2] if len(kparts) > 2 else "")
-                    self._index_remove_key(self._artist_album_index, aa, k)
-                if keys:
-                    del self._title_index[at]
-                removed += len(keys)
-            if removed:
+            key = self._key(artist, title, album)
+            if key in self._data:
+                parts = key.split("\t")
+                self._index_remove_key(
+                    self._title_index, (parts[0], parts[1]), key
+                )
+                self._index_remove_key(
+                    self._artist_album_index, (parts[0], parts[2]), key
+                )
+                del self._data[key]
                 self._save()
-        return removed
 
     def remove_album_entries(self, triples: list) -> int:
         """Remove entries by exact (artist, title, album) triples in a single save."""
@@ -389,20 +305,6 @@ class Catalog:
                 self._save()
             return len(keys)
 
-    def set_album_year(self, artist: str, album: str, year: str) -> int:
-        """Set year on all songs for (artist, album). Returns count updated."""
-        updated = 0
-        al = artist.lower().strip()
-        alb = album.lower().strip()
-        with self._lock:
-            for key in self._artist_album_index.get((al, alb), []):
-                if key in self._data:
-                    self._data[key]["year"] = year
-                    updated += 1
-            if updated:
-                self._save()
-        return updated
-
     def reload(self):
         """Re-read the catalog file if it has changed on disk since last load/save."""
         with self._lock:
@@ -447,55 +349,6 @@ class Catalog:
     def all_entries(self) -> list[dict]:
         with self._lock:
             return list(self._data.values())
-
-    def export_csv(self, path) -> int:
-        """Export catalog to CSV file. Returns number of rows written."""
-        import csv
-
-        entries = self.all_entries()
-        with open(path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(
-                f,
-                fieldnames=["artist", "title", "album", "year", "track", "lyrics"],
-                extrasaction="ignore",
-            )
-            writer.writeheader()
-            writer.writerows(entries)
-        return len(entries)
-
-    def stats(self) -> dict:
-        """Return catalog statistics in a single lock acquisition."""
-        with self._lock:
-            artists: set[str] = set()
-            albums: set[tuple[str, str]] = set()
-            with_lyrics = 0
-            groups: dict[tuple, int] = {}
-            for entry in self._data.values():
-                artists.add(entry["artist"].lower().strip())
-                albums.add(
-                    (
-                        entry["artist"].lower().strip(),
-                        (entry.get("album") or "").lower().strip(),
-                    )
-                )
-                has_lyrics = bool(entry.get("lyrics", "").strip())
-                if has_lyrics:
-                    with_lyrics += 1
-                key = self._key(entry["artist"], entry["title"], entry.get("album", ""))
-                parts = key.split("\t")
-                if len(parts) >= 2 and has_lyrics:
-                    at = (parts[0], parts[1])
-                    groups[at] = groups.get(at, 0) + 1
-            duplicates = sum(1 for c in groups.values() if c > 1)
-            total = len(self._data)
-        return {
-            "artists": len(artists),
-            "albums": len(albums),
-            "songs": total,
-            "with_lyrics": with_lyrics,
-            "without_lyrics": total - with_lyrics,
-            "duplicates": duplicates,
-        }
 
     def __len__(self) -> int:
         with self._lock:

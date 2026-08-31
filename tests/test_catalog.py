@@ -19,7 +19,7 @@ class CatalogTests(unittest.TestCase):
             entry = cat.get("A", "Song", "Album")
             self.assertIsNotNone(entry)
             self.assertEqual(entry["track"], 1)
-            cat.remove("A", "Song")
+            cat.remove("A", "Song", "Album")
             self.assertEqual(len(cat), 0)
 
     def test_add_to_new_album_removes_old_entry(self):
@@ -38,21 +38,6 @@ class CatalogTests(unittest.TestCase):
             entry = cat.get("A", "Song", "NewAlbum")
             self.assertIsNotNone(entry)
             self.assertEqual(entry["album"], "NewAlbum")
-
-    def test_remove_entries_and_year_update(self):
-        with TemporaryDirectory() as tmp:
-            cat_path = Path(tmp) / "catalog.json"
-            cat = Catalog(cat_path)
-            cat.add("A", "One", "Album", "", "lyrics")
-            cat.add("A", "Two", "Album", "", "lyrics")
-            cat.add("B", "Other", "Other", "", "lyrics")
-            updated = cat.set_album_year("A", "Album", "1999")
-            self.assertEqual(updated, 2)
-            entry = cat.get("A", "One", "Album")
-            self.assertEqual(entry["year"], "1999")
-            removed = cat.remove_entries([("A", "One"), ("A", "Two")])
-            self.assertEqual(removed, 2)
-            self.assertEqual(len(cat), 1)
 
     def test_remove_artist(self):
         with TemporaryDirectory() as tmp:
@@ -135,6 +120,18 @@ class CatalogTests(unittest.TestCase):
             cat = Catalog(cat_path)
             self.assertEqual(len(cat), 1)
             self.assertIsNotNone(cat.get("A", "B", ""))
+
+    def test_add_many_indexes_new_entries(self):
+        with TemporaryDirectory() as tmp:
+            cat = Catalog(Path(tmp) / "catalog.json")
+            cat.add_many(
+                [
+                    {"artist": "A", "title": "One", "album": "Album", "lyrics": "x"},
+                    {"artist": "A", "title": "Two", "album": "Album", "lyrics": "y"},
+                ]
+            )
+            self.assertEqual(len(cat.find_album("A", "Album")), 2)
+            self.assertEqual(len(cat.find_by_artist("A")), 2)
 
     def test_add_many_empty_list_is_noop(self):
         with TemporaryDirectory() as tmp:
@@ -356,16 +353,6 @@ class CatalogTests(unittest.TestCase):
             self.assertIsNotNone(entry)
             self.assertEqual(entry["lyrics"], "lyrics B")
 
-    def test_remove_entries_deletes_all_album_variants(self):
-        """remove_entries (artist, title) tuples deletes all album variants — existing behaviour."""
-        with TemporaryDirectory() as tmp:
-            cat = Catalog(Path(tmp) / "catalog.json")
-            cat.add("Artist", "Song", "Album A", "", "lyrics A")
-            cat.add("Artist", "Song", "Album B", "", "lyrics B")
-            removed = cat.remove_entries([("Artist", "Song")])
-            self.assertEqual(removed, 2)
-            self.assertEqual(len(cat), 0)
-
     def test_migration_two_tab_keys(self):
         """Old 2-tab keys (artist\\ttitle) must be migrated to 3-tab keys on load."""
         with TemporaryDirectory() as tmp:
@@ -463,39 +450,6 @@ class CatalogTests(unittest.TestCase):
             self.assertIsNotNone(remaining)
             self.assertEqual(remaining["album"], "Album B")
 
-    def test_find_returns_entry_across_any_album(self):
-        """find() locates a song regardless of which album it was stored under."""
-        with TemporaryDirectory() as tmp:
-            cat = Catalog(Path(tmp) / "catalog.json")
-            cat.add("Artist", "Song", "Album X", "2020", "some lyrics")
-            result = cat.find("Artist", "Song")
-            self.assertIsNotNone(result)
-            self.assertEqual(result["album"], "Album X")
-
-    def test_find_prefers_entry_with_lyrics(self):
-        """find() returns the entry that has lyrics when multiple albums exist."""
-        with TemporaryDirectory() as tmp:
-            cat = Catalog(Path(tmp) / "catalog.json")
-            cat.add("Artist", "Song", "Album A", "", "")  # no lyrics
-            cat.add("Artist", "Song", "Album B", "", "real lyrics")
-            result = cat.find("Artist", "Song")
-            self.assertIsNotNone(result)
-            self.assertEqual(result["album"], "Album B")
-
-    def test_find_returns_none_when_not_found(self):
-        with TemporaryDirectory() as tmp:
-            cat = Catalog(Path(tmp) / "catalog.json")
-            self.assertIsNone(cat.find("Ghost", "Nobody"))
-
-    def test_find_returns_first_entry_when_none_have_lyrics(self):
-        """find() returns the first match when no entry carries lyrics."""
-        with TemporaryDirectory() as tmp:
-            cat = Catalog(Path(tmp) / "catalog.json")
-            cat.add("Artist", "Song", "Album A", "", "")
-            result = cat.find("Artist", "Song")
-            self.assertIsNotNone(result)
-            self.assertEqual(result["album"], "Album A")
-
     def test_all_entries_returns_all(self):
         with TemporaryDirectory() as tmp:
             cat = Catalog(Path(tmp) / "catalog.json")
@@ -504,25 +458,6 @@ class CatalogTests(unittest.TestCase):
             entries = cat.all_entries()
             self.assertEqual(len(entries), 2)
             self.assertEqual({e["title"] for e in entries}, {"One", "Two"})
-
-    def test_remove_with_album_sole_entry_cleans_index(self):
-        """Removing the only album variant cleans the title index entry."""
-        with TemporaryDirectory() as tmp:
-            cat = Catalog(Path(tmp) / "catalog.json")
-            cat.add("Artist", "Song", "Album A", "", "lyrics")
-            cat.remove("Artist", "Song", "Album A")
-            self.assertEqual(len(cat), 0)
-            self.assertIsNone(cat.find("Artist", "Song"))
-
-    def test_remove_album_entries_sole_variant_cleans_index(self):
-        """Removing the last album variant via remove_album_entries cleans the title index."""
-        with TemporaryDirectory() as tmp:
-            cat = Catalog(Path(tmp) / "catalog.json")
-            cat.add("Artist", "Song", "Album A", "", "lyrics")
-            removed = cat.remove_album_entries([("Artist", "Song", "Album A")])
-            self.assertEqual(removed, 1)
-            self.assertEqual(len(cat), 0)
-            self.assertIsNone(cat.find("Artist", "Song"))
 
     def test_index_remove_key_missing_lookup_is_noop(self):
         """_index_remove_key does nothing when the lookup key is absent."""
@@ -535,21 +470,6 @@ class CatalogTests(unittest.TestCase):
         index: dict = {("x", "y"): ["other_key"]}
         Catalog._index_remove_key(index, ("x", "y"), "missing_key")
         self.assertEqual(index, {("x", "y"): ["other_key"]})
-
-    def test_find_returns_none_when_index_stale(self):
-        """find() returns None when index keys are not present in _data (defensive guard)."""
-        with TemporaryDirectory() as tmp:
-            cat = Catalog(Path(tmp) / "catalog.json")
-            cat._title_index[("ghost", "track")] = ["ghost\ttrack\t"]
-            self.assertIsNone(cat.find("ghost", "track"))
-
-    def test_find_is_case_insensitive(self):
-        with TemporaryDirectory() as tmp:
-            cat = Catalog(Path(tmp) / "catalog.json")
-            cat.add("The Beatles", "Hey Jude", "Past Masters", "", "na na na")
-            result = cat.find("the beatles", "hey jude")
-            self.assertIsNotNone(result)
-            self.assertEqual(result["title"], "Hey Jude")
 
     def test_find_album_returns_all_entries(self):
         with TemporaryDirectory() as tmp:
@@ -574,68 +494,6 @@ class CatalogTests(unittest.TestCase):
             cat.add("Artist", "Song", "Album", "", "lyrics")
             results = cat.find_album("Other", "Album")
             self.assertEqual(len(results), 0)
-
-    def test_find_duplicates_returns_groups(self):
-        with TemporaryDirectory() as tmp:
-            cat = Catalog(Path(tmp) / "catalog.json")
-            cat.add("Artist", "Song", "Album A", "", "lyrics A")
-            cat.add("Artist", "Song", "Album B", "", "lyrics B")
-            cat.add("Artist", "Other", "Album A", "", "lyrics")
-            duplicates = cat.find_duplicates()
-            self.assertEqual(len(duplicates), 1)
-            self.assertEqual(len(duplicates[0]), 2)
-
-    def test_find_duplicates_ignores_entries_without_lyrics(self):
-        with TemporaryDirectory() as tmp:
-            cat = Catalog(Path(tmp) / "catalog.json")
-            cat.add("Artist", "Song", "Album A", "", "")
-            cat.add("Artist", "Song", "Album B", "", "lyrics")
-            duplicates = cat.find_duplicates()
-            self.assertEqual(len(duplicates), 0)
-
-    def test_find_duplicates_empty_when_no_duplicates(self):
-        with TemporaryDirectory() as tmp:
-            cat = Catalog(Path(tmp) / "catalog.json")
-            cat.add("Artist", "One", "Album", "", "lyrics")
-            cat.add("Artist", "Two", "Album", "", "lyrics")
-            duplicates = cat.find_duplicates()
-            self.assertEqual(len(duplicates), 0)
-
-    def test_stats(self):
-        with TemporaryDirectory() as tmp:
-            cat = Catalog(Path(tmp) / "catalog.json")
-            cat.add("Artist A", "Song 1", "Album 1", "2020", "lyrics")
-            cat.add("Artist A", "Song 2", "Album 1", "2020", "")  # no lyrics
-            cat.add("Artist A", "Song 1", "Album 2", "2021", "lyrics")  # duplicate
-            cat.add("Artist B", "Song 3", "Album 3", "2022", "lyrics")
-            s = cat.stats()
-            self.assertEqual(s["artists"], 2)
-            self.assertEqual(s["albums"], 3)
-            self.assertEqual(s["songs"], 4)
-            self.assertEqual(s["with_lyrics"], 3)
-            self.assertEqual(s["without_lyrics"], 1)
-            self.assertEqual(s["duplicates"], 1)
-
-    def test_export_csv(self):
-        with TemporaryDirectory() as tmp:
-            cat = Catalog(Path(tmp) / "catalog.json")
-            cat.add("Artist", "Song", "Album", "2020", "lyrics", track=1)
-            csv_path = Path(tmp) / "export.csv"
-            count = cat.export_csv(csv_path)
-            self.assertEqual(count, 1)
-            content = csv_path.read_text(encoding="utf-8")
-            self.assertIn("artist", content)
-            self.assertIn("Artist", content)
-            self.assertIn("Song", content)
-
-    def test_export_csv_empty_catalog(self):
-        with TemporaryDirectory() as tmp:
-            cat = Catalog(Path(tmp) / "catalog.json")
-            csv_path = Path(tmp) / "export.csv"
-            count = cat.export_csv(csv_path)
-            self.assertEqual(count, 0)
-            content = csv_path.read_text(encoding="utf-8")
-            self.assertIn("artist", content)  # header still present
 
     def test_find_by_artist(self):
         with TemporaryDirectory() as tmp:
@@ -677,46 +535,6 @@ class CatalogTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             cat = Catalog(Path(tmp) / "catalog.json")
             self.assertEqual(cat.all_artist_album_pairs(), set())
-
-    def test_add_many_new_entries_updates_title_index(self):
-        """add_many with brand-new entries must update _title_index (is_new=True path)."""
-        with TemporaryDirectory() as tmp:
-            cat = Catalog(Path(tmp) / "catalog.json")
-            cat.add_many(
-                [
-                    {
-                        "artist": "A",
-                        "title": "One",
-                        "album": "Album",
-                        "year": "",
-                        "lyrics": "x",
-                        "track": 1,
-                    },
-                    {
-                        "artist": "A",
-                        "title": "Two",
-                        "album": "Album",
-                        "year": "",
-                        "lyrics": "y",
-                        "track": 2,
-                    },
-                ]
-            )
-            self.assertEqual(len(cat), 2)
-            self.assertIsNotNone(cat.find("A", "One"))
-            self.assertIsNotNone(cat.find("A", "Two"))
-
-    def test_stats_counts_normalized(self):
-        """stats() should count artists/albums by normalized case, not display case."""
-        with TemporaryDirectory() as tmp:
-            cat_path = Path(tmp) / "catalog.json"
-            cat = Catalog(cat_path)
-            cat.add("Radiohead", "Song1", "OK Computer", "1997", "lyrics")
-            cat.add("radiohead", "Song2", "ok computer", "1997", "lyrics")
-            stats = cat.stats()
-            self.assertEqual(stats["artists"], 1)
-            self.assertEqual(stats["albums"], 1)
-            self.assertEqual(stats["songs"], 2)
 
     def test_load_stat_oserror_is_swallowed(self):
         """OSError on stat() after loading the catalog file must not propagate."""

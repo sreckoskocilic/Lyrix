@@ -1,3 +1,5 @@
-from lyrix.browser import main
+import sys
 
-main()
+from lyrix.ui.app import main
+
+sys.exit(main())

@@ -9,6 +9,7 @@ settings.json
 # Build artifacts
 build/
 dist/
+mockups/
 *.spec.bak
 __pycache__/
 .pytest_cache/

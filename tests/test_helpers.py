@@ -1,13 +1,10 @@
 import unittest
 from types import SimpleNamespace
 
-from lyrix.base_app import _year_sort
 from lyrix.catalog import (
     _extract_name,
-    _format_album_header,
-    _format_song_header,
-    _format_track_block,
     _release_year,
+    _year_sort,
     get_resource_path,
 )
 
@@ -54,6 +51,9 @@ class YearParsingTests(unittest.TestCase):
         self.assertGreater(_year_sort(""), _year_sort("2020"))
         self.assertEqual(_year_sort(None), 9999)
 
+    def test_year_sort_non_numeric_sorts_last(self):
+        self.assertEqual(_year_sort("nineteen"), 9999)
+
 
 class FormattingTests(unittest.TestCase):
     def test_get_resource_path(self):
@@ -67,38 +67,6 @@ class FormattingTests(unittest.TestCase):
     def test_extract_name_dict(self):
         self.assertEqual(_extract_name({"name": "Artist"}), "Artist")
         self.assertEqual(_extract_name({"name": None}, "fallback"), "fallback")
-
-    def test_format_song_header(self):
-        header = _format_song_header("Artist", "Title", "Album", "2020")
-        self.assertIn("Artist: Artist", header)
-        self.assertIn("Song: Title", header)
-        self.assertIn("Album: Album (2020)", header)
-
-    def test_format_song_header_no_year(self):
-        header = _format_song_header("Artist", "Title", "Album", "")
-        self.assertIn("Album: Album\n", header)
-        self.assertNotIn("()", header)
-
-    def test_format_album_header(self):
-        header = _format_album_header("Artist", "Album", "2021")
-        self.assertIn("Artist: Artist", header)
-        self.assertIn("Album: Album (2021)", header)
-
-    def test_format_album_header_no_year(self):
-        header = _format_album_header("Artist", "Album", "")
-        self.assertIn("Album: Album\n", header)
-        self.assertNotIn("()", header)
-
-    def test_format_track_block_with_number(self):
-        block = _format_track_block(3, "Title", "la la la")
-        self.assertIn("3. Title", block)
-        self.assertIn("la la la", block)
-
-    def test_format_track_block_no_number(self):
-        # track 0/None → no numeric prefix
-        self.assertIn("\nTitle\n", _format_track_block(0, "Title", "words"))
-        self.assertIn("\nTitle\n", _format_track_block(None, "Title", "words"))
-
 
 if __name__ == "__main__":
     unittest.main()
