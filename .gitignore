@@ -1,11 +1,6 @@
 # Environment / secrets
 .env
 
-# Runtime data
-lyrics_catalog.json
-lyrics_catalog.tmp
-settings.json
-
 # Build artifacts
 build/
 dist/

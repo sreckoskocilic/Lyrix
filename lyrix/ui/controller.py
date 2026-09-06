@@ -38,6 +38,8 @@ from .theme import (
 
 _log = logging.getLogger(__name__)
 
+# Album names that stand for "not on an album" and must never be searched as one.
+_PSEUDO_ALBUMS = {"", SONGS_CATEGORY.lower()}
 _FUZZY_THRESHOLD = 0.6
 _FUZZY_MIN_QUERY = 3
 _PLACEHOLDER = "← Odaberi pjesmu iz kataloga"
@@ -69,7 +71,7 @@ def _lyrics_html(text: str, size: int, line_height: float) -> str:
         if _is_section(line):
             style = f"color:{section}; font-size:{small}px;"
         else:
-            style = f"color:{body};"
+            style = f"color:{body}; font-size:{size}px;"
         content = html.escape(line) or "&nbsp;"
         parts.append(f'<p style="margin:0 0 {gap}px 0; {style}">{content}</p>')
     return "".join(parts)
@@ -115,7 +117,11 @@ class Controller(QObject):
 
         saved = state.read_state()
         self._filter = ""
-        self._expanded: set[str] = set(saved.get("expanded_artists") or [])
+        self._expanded: set[str] = {
+            raw.lower().strip()
+            for raw in (saved.get("expanded_artists") or [])
+            if isinstance(raw, str)
+        }
         self._expanded_albums: set[tuple[str, str]] = {
             (parts[0], parts[1])
             for raw in (saved.get("expanded_albums") or [])
@@ -124,14 +130,16 @@ class Controller(QObject):
         self._current: dict | None = None
         self._pending_restore: dict | None = saved.get("last_selected") or None
         if self._pending_restore:
-            self._expanded.add(self._pending_restore.get("artist", ""))
+            self._expanded.add(
+                self._pending_restore.get("artist", "").lower().strip()
+            )
             self._expanded_albums.add(
                 (
                     self._pending_restore.get("artist", "").lower().strip(),
                     self._pending_restore.get("album", "").lower().strip(),
                 )
             )
-        self._current_index = -1
+        self._pending_remove: dict | None = None
         self._editing = False
         self._busy = False
         self._closing = False
@@ -213,7 +221,12 @@ class Controller(QObject):
         total = len(raw_entries)
 
         keyed = [
-            (e, e["artist"].lower(), e["title"].lower(), (e.get("album") or "").lower())
+            (
+                e,
+                e["artist"].lower().strip(),
+                e["title"].lower().strip(),
+                (e.get("album") or "").lower().strip(),
+            )
             for e in raw_entries
         ]
         artist_total = len({t[1] for t in keyed})
@@ -260,7 +273,6 @@ class Controller(QObject):
         rows: list[Node] = []
         seen_artists: set[str] = set()
         seen_albums: set[tuple] = set()
-        artist_names: set[str] = set()
         filtering = bool(self._filter)
 
         for entry, al, _tl, _alb, bucket in tagged:
@@ -268,12 +280,11 @@ class Controller(QObject):
             album = entry.get("album") or SONGS_CATEGORY
             year = canon_year.get(bucket, "")
             # A filter is a search: open everything it matched.
-            artist_open = filtering or artist in self._expanded
+            artist_open = filtering or al in self._expanded
             album_open = filtering or bucket in self._expanded_albums
 
             if al not in seen_artists:
                 seen_artists.add(al)
-                artist_names.add(artist)
                 rows.append(
                     {
                         "kind": "artist",
@@ -324,7 +335,11 @@ class Controller(QObject):
             )
 
         self._model.set_rows(rows)
-        self._expanded &= artist_names
+        if not filtering:
+            # Drop artists/albums that no longer exist. Never do this while
+            # filtering: the filtered-out ones are hidden, not gone.
+            self._expanded &= {t[1] for t in tagged}
+            self._expanded_albums &= {t[4] for t in tagged}
 
         if self._filter:
             shown = sum(1 for r in rows if r["kind"] == "song")
@@ -361,7 +376,6 @@ class Controller(QObject):
         index = self._model.index_of_song(
             entry["artist"], entry["title"], entry.get("album", "")
         )
-        self._current_index = index
         self.currentIndexChanged.emit(index)
 
     @Slot(int)
@@ -370,14 +384,17 @@ class Controller(QObject):
         if row is None:
             return
         if row["kind"] == "artist":
-            name = str(row["artist"])
+            name = str(row["artist"]).lower().strip()
             if name in self._expanded:
                 self._expanded.discard(name)
             else:
                 self._expanded.add(name)
             self.refresh()
         elif row["kind"] == "album":
-            bucket = (str(row["artist"]).lower(), str(row["album"]).lower())
+            bucket = (
+                str(row["artist"]).lower().strip(),
+                str(row["album"]).lower().strip(),
+            )
             if bucket in self._expanded_albums:
                 self._expanded_albums.discard(bucket)
             else:
@@ -399,7 +416,6 @@ class Controller(QObject):
     @Slot(int)
     def click(self, index: int) -> None:
         row = self._model.row_at(index)
-        self._current_index = index
         if row is None or row["kind"] != "song":
             return
         entry = self.catalog.get(
@@ -411,14 +427,6 @@ class Controller(QObject):
             self.cancel_edit()
         self._current = entry
         self._emit_song(entry)
-
-    @Slot()
-    def select_first(self) -> None:
-        index = self._model.first_song_index()
-        if index >= 0:
-            self._current_index = index
-            self.currentIndexChanged.emit(index)
-            self.click(index)
 
     # ── Lyrics display ────────────────────────────────────────────────────────
 
@@ -462,10 +470,6 @@ class Controller(QObject):
             self._lyrics_size = size
             if self._current is not None:
                 self._emit_song(self._current)
-        return self._lyrics_size
-
-    @Slot(result=int)
-    def lyrics_size(self) -> int:
         return self._lyrics_size
 
     # ── Edit ──────────────────────────────────────────────────────────────────
@@ -547,8 +551,15 @@ class Controller(QObject):
     @Slot(int, result=str)
     def remove_prompt(self, index: int) -> str:
         row = self._model.row_at(index)
+        self._pending_remove = None
         if row is None:
             return ""
+        self._pending_remove = {
+            "kind": str(row["kind"]),
+            "artist": str(row["artist"]),
+            "title": str(row["title"]),
+            "album": str(row["album"]),
+        }
         if row["kind"] == "song":
             return f'Remove "{row["title"]}" from catalog?'
         if row["kind"] == "album":
@@ -559,33 +570,33 @@ class Controller(QObject):
         count = len(self.catalog.find_by_artist(str(row["artist"])))
         return f'Remove all {count} song(s) by "{row["artist"]}" from the catalog?'
 
-    @Slot(int)
-    def remove_confirmed(self, index: int) -> None:
-        row = self._model.row_at(index)
+    @Slot()
+    def remove_confirmed(self) -> None:
+        row = self._pending_remove
+        self._pending_remove = None
         if row is None:
             return
+        artist, title, album = row["artist"], row["title"], row["album"]
         kind = row["kind"]
         if kind == "song":
-            self.catalog.remove(
-                str(row["artist"]), str(row["title"]), str(row["album"])
-            )
-            if self._current and self._current["title"] == row["title"]:
+            self.catalog.remove(artist, title, album)
+            if self._current and (
+                self._current["artist"],
+                self._current["title"],
+                self._current.get("album", ""),
+            ) == (artist, title, album):
                 self._current = None
-            self.statusChanged.emit(f"Removed: {row['title']}")
+            self.statusChanged.emit(f"Removed: {title}")
         elif kind == "album":
-            entries = self.catalog.find_album(str(row["artist"]), str(row["album"]))
-            triples = [
-                (e["artist"], e["title"], e.get("album", "")) for e in entries
-            ]
-            removed = self.catalog.remove_album_entries(triples)
+            removed = self.catalog.remove_album(artist, album)
             self._expanded_albums.discard(
-                (str(row["artist"]).lower(), str(row["album"]).lower())
+                (artist.lower().strip(), album.lower().strip())
             )
             self._current = None
             self.statusChanged.emit(f"Removed {removed} songs")
         else:
-            artist_lower = str(row["artist"]).lower()
-            removed = self.catalog.remove_artist(str(row["artist"]))
+            artist_lower = artist.lower().strip()
+            removed = self.catalog.remove_artist(artist)
             self._expanded_albums -= {
                 key for key in self._expanded_albums if key[0] == artist_lower
             }
@@ -598,7 +609,7 @@ class Controller(QObject):
     @Slot(str, str)
     def search_song(self, artist: str, song: str) -> None:
         artist, song = artist.strip(), song.strip()
-        if not self._require_genius():
+        if self._busy or not self._require_genius():
             return
         if not artist:
             self.errorRaised.emit("Error", "Artist is required!")
@@ -617,15 +628,21 @@ class Controller(QObject):
             self._idle()
             self.errorRaised.emit("Error", f"Search failed:\n{exc}")
             return
-        self._idle()
         if not ss:
+            self._idle()
             self.statusChanged.emit(f"Not found: {song}")
             return
         title = ss.title.strip()
         album_data = getattr(ss, "album", {}) or {}
-        album_name = album_data.get("name") or SONGS_CATEGORY
+        album_name = (album_data.get("name") or "").strip() or SONGS_CATEGORY
         year = _release_year(album_data)
-        self.catalog.add(ss.artist, title, album_name, year, ss.to_text())
+        try:
+            self.catalog.add(ss.artist, title, album_name, year, ss.to_text())
+        except Exception as exc:
+            self._idle()
+            self.errorRaised.emit("Error", f"Could not save to catalog:\n{exc}")
+            return
+        self._idle()
         self.statusChanged.emit(f"Found and imported: {title}")
         self._showRequested.emit(ss.artist, title, album_name)
         self._refreshRequested.emit()
@@ -633,7 +650,7 @@ class Controller(QObject):
     @Slot(str, str)
     def search_album(self, artist: str, album: str) -> None:
         artist, album = artist.strip(), album.strip()
-        if not self._require_genius():
+        if self._busy or not self._require_genius():
             return
         if not artist:
             self.errorRaised.emit("Error", "Artist is required!")
@@ -652,8 +669,8 @@ class Controller(QObject):
             self._idle()
             self.errorRaised.emit("Error", f"Search failed:\n{exc}")
             return
-        self._idle()
         if not ss or not ss.tracks:
+            self._idle()
             self.statusChanged.emit(f"Album not found: {album}")
             return
         artist_name = _extract_name(getattr(ss, "artist", None), artist)
@@ -664,10 +681,12 @@ class Controller(QObject):
                 _build_track_entries(ss.tracks, artist_name, album_name, year)
             )
         except Exception as exc:
+            self._idle()
             self.errorRaised.emit(
                 "Error", f"Failed to save album to catalog:\n{exc}"
             )
             return
+        self._idle()
         self.statusChanged.emit(
             f"Found and imported: {album_name} ({len(ss.tracks)} tracks)"
         )
@@ -676,7 +695,7 @@ class Controller(QObject):
     @Slot(str)
     def search_artist(self, artist: str) -> None:
         artist = artist.strip()
-        if not self._require_genius():
+        if self._busy or not self._require_genius():
             return
         if not artist:
             self.errorRaised.emit("Error", "Artist is required!")
@@ -729,9 +748,12 @@ class Controller(QObject):
             self._idle()
             self.errorRaised.emit("Error", f"Could not fetch lyrics:\n{exc}")
             return
-        self._idle()
         if not ss:
+            self._idle()
             self.statusChanged.emit(f"Not found: {title}")
+            return
+        if self._closing:
+            self._idle()
             return
         existing = self.catalog.get(artist, title, album)
         album_data = getattr(ss, "album", {}) or {}
@@ -744,9 +766,19 @@ class Controller(QObject):
         year = _release_year(album_data) or (existing or {}).get("year", "")
         track = (existing or {}).get("track", 0)
         ss_title = ss.title.strip()
-        if ss_title != title or album_name != album:
-            self.catalog.remove(artist, title, album)
-        self.catalog.add(artist, ss_title, album_name, year, ss.to_text(), track=track)
+        try:
+            # Write the replacement first: a failure then leaves the old entry
+            # intact instead of losing the song.
+            self.catalog.add(
+                artist, ss_title, album_name, year, ss.to_text(), track=track
+            )
+            if ss_title != title or album_name != album:
+                self.catalog.remove(artist, title, album)
+        except Exception as exc:
+            self._idle()
+            self.errorRaised.emit("Error", f"Could not save lyrics:\n{exc}")
+            return
+        self._idle()
         self.statusChanged.emit(f"Updated: {ss_title}")
         self._showRequested.emit(artist, ss_title, album_name)
         self._refreshRequested.emit()
@@ -786,7 +818,7 @@ class Controller(QObject):
             self.statusChanged.emit(
                 f"Updating: {artist} — {album_name or 'singles'}…"
             )
-            if album_name and album_name.lower() != "unknown album":
+            if album_name.lower() not in _PSEUDO_ALBUMS:
                 try:
                     ss = self.genius.search_album(album_name, artist)
                 except Exception as exc:
@@ -813,10 +845,10 @@ class Controller(QObject):
                         failed += len(ss.tracks)
                         continue
                     updated += len(ss.tracks)
+                    self._refreshRequested.emit()
                     continue
-            # Songs not filed under an album (singles / unknown album) are skipped.
-            if not album_name or album_name.lower() == "unknown album":
-                continue
+            # Singles and albums Genius has no page for fall back to per-song
+            # lookups below.
             song_entries: list[dict] = []
             title_changes: list[tuple] = []
             for song_artist, title in songs:
@@ -852,10 +884,12 @@ class Controller(QObject):
                     }
                 )
                 updated += 1
-            if title_changes:
-                self.catalog.remove_album_entries(title_changes)
             if song_entries:
                 self.catalog.add_many(song_entries)
+            if title_changes:
+                self.catalog.remove_album_entries(title_changes)
+            if song_entries or title_changes:
+                self._refreshRequested.emit()
         self._idle()
         message = f"Updated {updated} songs" + (
             f", {failed} failed" if failed else ""
@@ -912,6 +946,7 @@ class Controller(QObject):
                 self.catalog.add_many(entries)
                 added += len(entries)
                 existing.add(key)
+                self._refreshRequested.emit()
 
         self._idle()
         message = f"Imported {added} songs"

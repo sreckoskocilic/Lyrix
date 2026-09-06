@@ -1,7 +1,7 @@
 # Lint config. Without this file ruff falls back to whatever its current
 # default rule set is, which changed in ruff 0.16 (bugbear, bandit, DTZ, RUF...
 # are now on by default) and made CI fail on unchanged code.
-target-version = "py310"
+target-version = "py312"
 
 [lint]
 # Keep ruff's defaults, minus rules that fight this codebase on purpose.

@@ -146,9 +146,56 @@ class CatalogTests(unittest.TestCase):
             cat = Catalog(cat_path)
             cat.add("A", "Song", "Album", "", "lyrics")
 
-            with patch.object(Path, "write_text", side_effect=OSError("boom")):
+            with patch.object(Path, "open", side_effect=OSError("boom")):
                 with self.assertRaises(OSError):
                     cat._save()
+
+    def test_remove_album_removes_every_track(self):
+        with TemporaryDirectory() as tmp:
+            cat_path = Path(tmp) / "catalog.json"
+            cat = Catalog(cat_path)
+            cat.add("A", "One", "Album", "2020", "l1")
+            cat.add("A", "Two", "Album", "2020", "l2")
+            cat.add("A", "Other", "Elsewhere", "2021", "l3")
+            self.assertEqual(cat.remove_album("a", " ALBUM "), 2)
+            self.assertEqual(len(cat), 1)
+            self.assertIsNotNone(cat.get("A", "Other", "Elsewhere"))
+            self.assertEqual(cat.find_album("A", "Album"), [])
+
+    def test_remove_album_unknown_album_is_a_noop(self):
+        with TemporaryDirectory() as tmp:
+            cat_path = Path(tmp) / "catalog.json"
+            cat = Catalog(cat_path)
+            cat.add("A", "One", "Album", "2020", "l1")
+            self.assertEqual(cat.remove_album("A", "Nope"), 0)
+            self.assertEqual(len(cat), 1)
+
+    def test_load_rejects_non_object_root(self):
+        with TemporaryDirectory() as tmp:
+            cat_path = Path(tmp) / "catalog.json"
+            cat_path.write_text("[]", encoding="utf-8")
+            cat = Catalog(cat_path)
+            self.assertEqual(len(cat), 0)
+            self.assertTrue(cat_path.with_suffix(".corrupt").exists())
+
+    def test_load_rejects_non_object_entries(self):
+        with TemporaryDirectory() as tmp:
+            cat_path = Path(tmp) / "catalog.json"
+            cat_path.write_text('{"entries": ["not-a-mapping"]}', encoding="utf-8")
+            cat = Catalog(cat_path)
+            self.assertEqual(len(cat), 0)
+            self.assertTrue(cat_path.with_suffix(".corrupt").exists())
+
+    def test_reload_keeps_data_on_bad_shape(self):
+        with TemporaryDirectory() as tmp:
+            cat_path = Path(tmp) / "catalog.json"
+            cat = Catalog(cat_path)
+            cat.add("A", "Song", "Album", "2020", "lyrics")
+            future = cat_path.stat().st_mtime + 100
+            cat_path.write_text('{"entries": []}', encoding="utf-8")
+            os.utime(cat_path, (future, future))
+            cat.reload()
+            self.assertEqual(len(cat), 1)
 
     def test_load_corrupt_copy_oserror_is_swallowed(self):
         """OSError when writing the .corrupt backup must not propagate."""

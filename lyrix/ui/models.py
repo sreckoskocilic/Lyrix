@@ -66,9 +66,6 @@ class CatalogModel(QAbstractListModel):
     def row_at(self, index: int) -> Node | None:
         return self._rows[index] if 0 <= index < len(self._rows) else None
 
-    def rows(self) -> list[Node]:
-        return self._rows
-
     def index_of_song(self, artist: str, title: str, album: str) -> int:
         for i, row in enumerate(self._rows):
             if (
@@ -77,11 +74,5 @@ class CatalogModel(QAbstractListModel):
                 and row.get("title") == title
                 and row.get("album") == album
             ):
-                return i
-        return -1
-
-    def first_song_index(self) -> int:
-        for i, row in enumerate(self._rows):
-            if row.get("kind") == "song":
                 return i
         return -1

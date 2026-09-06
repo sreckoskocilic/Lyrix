@@ -28,10 +28,16 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements-dev.txt
+          python -m pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Run linter
         run: ruff check lyrix/
+
+      - name: UI import smoke test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python -c "import lyrix.ui.app, lyrix.ui.controller, lyrix.ui.models, lyrix.ui.state"
 
       - name: Run tests
         env:

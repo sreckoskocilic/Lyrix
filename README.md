@@ -1,6 +1,6 @@
 # Lyrix
 
-[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-green.svg)](https://github.com/sreckoskocilic/Lyrix/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -50,7 +50,7 @@ Everything lives in `~/.lyrix/` (macOS/Linux) or `%APPDATA%\Lyrix\` (Windows):
 | File | What it is |
 |------|------------|
 | `lyrics_catalog.json` | All fetched lyrics |
-| `settings-qt.json` | Window geometry, sash position, expanded artists, font size |
+| `settings-qt.json` | Window geometry, sash position, expanded artists and albums, last selected song, font size |
 | `lyrix.log` | Warnings and errors |
 
 ## Building

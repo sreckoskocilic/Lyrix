@@ -1,14 +1,11 @@
-"""Persistent UI state for the QML app.
-
-Written to ~/.lyrix/settings-qt.json so the Tkinter app's settings.json stays
-untouched while both apps exist.
-"""
+"""Persistent UI state, written to ~/.lyrix/settings-qt.json."""
 
 from __future__ import annotations
 
 import contextlib
 import json
 import logging
+import os
 from typing import cast
 
 from PySide6.QtCore import QObject, Slot
@@ -33,7 +30,10 @@ def write_state(patch: dict[str, object]) -> None:
     tmp = STATE_PATH.with_suffix(".tmp")
     try:
         STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        tmp.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        with tmp.open("w", encoding="utf-8") as fh:
+            fh.write(json.dumps(state, indent=2))
+            fh.flush()
+            os.fsync(fh.fileno())
         tmp.replace(STATE_PATH)
     except (OSError, TypeError) as exc:
         _log.error("Failed to write UI state: %s", exc)
@@ -42,7 +42,7 @@ def write_state(patch: dict[str, object]) -> None:
 
 
 class WindowState(QObject):
-    """Window geometry, sash position and lyrics font size."""
+    """Window geometry and sash position."""
 
     @Slot(result="QVariantMap")
     def geometry(self) -> dict[str, object]:
@@ -63,12 +63,3 @@ class WindowState(QObject):
     @Slot(float)
     def save_sash(self, position: float) -> None:
         write_state({"sash": position})
-
-    @Slot(result=int)
-    def lyrics_size(self) -> int:
-        value = read_state().get("lyrics_size")
-        return value if isinstance(value, int) else 0
-
-    @Slot(int)
-    def save_lyrics_size(self, size: int) -> None:
-        write_state({"lyrics_size": size})

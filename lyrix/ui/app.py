@@ -49,7 +49,9 @@ def _load_fonts() -> str:
 def main() -> int:
     import dotenv
 
-    dotenv.load_dotenv(get_resource_path(".env"), override=True)
+    # No override: a real GENIUS_TOKEN in the environment must beat the copy
+    # baked into a frozen bundle, otherwise a rotated token needs a rebuild.
+    dotenv.load_dotenv(get_resource_path(".env"))
     _setup_logging()
 
     app = QGuiApplication(sys.argv)
@@ -71,8 +73,11 @@ def main() -> int:
     ctx.setContextProperty("CatalogRows", model)
     ctx.setContextProperty("Controller", controller)
     ctx.setContextProperty("WindowState", window_state)
-    engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))
+    main_qml = QML_DIR / "Main.qml"
+    engine.load(QUrl.fromLocalFile(str(main_qml)))
     if not engine.rootObjects():
+        # A windowed bundle has no stderr, so the log file is the only trace.
+        logging.getLogger(__name__).error("QML failed to load: %s", main_qml)
         return 1
     return app.exec()
 

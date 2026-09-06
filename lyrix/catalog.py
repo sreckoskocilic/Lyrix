@@ -7,7 +7,6 @@ from pathlib import Path
 from threading import Lock
 
 ENV_ABS_PATH = Path(__file__).parent.parent  # project root
-_FROZEN = getattr(sys, "frozen", False)
 _log = logging.getLogger(__name__)
 
 if sys.platform == "win32":  # pragma: no cover
@@ -73,6 +72,16 @@ def _release_year(album_data) -> str:
     return ""
 
 
+def _entries_or_raise(raw) -> dict:
+    """Return the entries mapping of a parsed catalog, rejecting any other shape."""
+    if not isinstance(raw, dict):
+        raise TypeError(f"catalog root is {type(raw).__name__}, expected object")
+    entries = raw.get("entries", {})
+    if not isinstance(entries, dict):
+        raise TypeError(f"catalog entries is {type(entries).__name__}, expected object")
+    return entries
+
+
 def _extract_name(obj, fallback="Unknown"):
     if isinstance(obj, dict):
         return obj.get("name") or fallback
@@ -89,7 +98,6 @@ class Catalog:
         self._path = path
         self._data: dict = {}
         self._lock = Lock()
-        self._title_index: dict[tuple, list[str]] = {}
         self._artist_album_index: dict[tuple[str, str], list[str]] = {}
         self._file_mtime: int = 0
         self._load()
@@ -98,7 +106,7 @@ class Catalog:
         if self._path.exists():
             try:
                 raw = json.loads(self._path.read_text(encoding="utf-8"))
-                data = raw.get("entries", {})
+                data = _entries_or_raise(raw)
                 needs_save = False
                 for old_key in [k for k in data if k.count("\t") == 1]:
                     entry = data.pop(old_key)
@@ -139,7 +147,10 @@ class Catalog:
         tmp = self._path.with_suffix(".tmp")
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
-            tmp.write_text(content, encoding="utf-8")
+            with tmp.open("w", encoding="utf-8") as fh:
+                fh.write(content)
+                fh.flush()
+                os.fsync(fh.fileno())
             tmp.replace(self._path)
             try:
                 self._file_mtime = self._path.stat().st_mtime_ns
@@ -165,13 +176,10 @@ class Catalog:
             del index[lookup]
 
     def _rebuild_index(self):
-        """Rebuild the secondary indexes for fast lookups."""
-        self._title_index.clear()
+        """Rebuild the (artist, album) index for fast lookups."""
         self._artist_album_index.clear()
         for key in self._data:
             parts = key.split("\t")
-            if len(parts) >= 2:
-                self._title_index.setdefault((parts[0], parts[1]), []).append(key)
             if len(parts) >= 3:
                 self._artist_album_index.setdefault((parts[0], parts[2]), []).append(
                     key
@@ -202,7 +210,6 @@ class Catalog:
             }
             if is_new:
                 parts = key.split("\t")
-                self._title_index.setdefault((parts[0], parts[1]), []).append(key)
                 self._artist_album_index.setdefault((parts[0], parts[2]), []).append(
                     key
                 )
@@ -229,7 +236,6 @@ class Catalog:
                 }
                 if is_new:
                     parts = key.split("\t")
-                    self._title_index.setdefault((parts[0], parts[1]), []).append(key)
                     self._artist_album_index.setdefault(
                         (parts[0], parts[2]), []
                     ).append(key)
@@ -253,9 +259,6 @@ class Catalog:
             if key in self._data:
                 parts = key.split("\t")
                 self._index_remove_key(
-                    self._title_index, (parts[0], parts[1]), key
-                )
-                self._index_remove_key(
                     self._artist_album_index, (parts[0], parts[2]), key
                 )
                 del self._data[key]
@@ -269,15 +272,26 @@ class Catalog:
                 key = self._key(artist, title, album)
                 if key in self._data:
                     parts = key.split("\t")
-                    at = (parts[0], parts[1])
-                    aa = (parts[0], parts[2])
-                    self._index_remove_key(self._title_index, at, key)
-                    self._index_remove_key(self._artist_album_index, aa, key)
+                    self._index_remove_key(
+                        self._artist_album_index, (parts[0], parts[2]), key
+                    )
                     del self._data[key]
                     removed += 1
             if removed:
                 self._save()
         return removed
+
+    def remove_album(self, artist: str, album: str) -> int:
+        """Remove every entry of one album, resolving keys under a single lock."""
+        aa = (artist.lower().strip(), album.lower().strip())
+        with self._lock:
+            keys = [k for k in self._artist_album_index.get(aa, []) if k in self._data]
+            for k in keys:
+                del self._data[k]
+            self._artist_album_index.pop(aa, None)
+            if keys:
+                self._save()
+            return len(keys)
 
     def remove_artist(self, artist: str) -> int:
         artist_lower = artist.lower().strip()
@@ -291,14 +305,6 @@ class Catalog:
             ]
             for k in keys:
                 del self._data[k]
-                parts = k.split("\t")
-                at = (parts[0], parts[1])
-                if at in self._title_index:
-                    self._title_index[at] = [
-                        key for key in self._title_index[at] if key != k
-                    ]
-                    if not self._title_index[at]:
-                        del self._title_index[at]
             for aa in aa_pairs:
                 del self._artist_album_index[aa]
             if keys:
@@ -316,13 +322,13 @@ class Catalog:
                 return
             try:
                 raw = json.loads(self._path.read_text(encoding="utf-8"))
+                data = _entries_or_raise(raw)
             except Exception as exc:
                 _log.warning(
                     "Catalog reload failed (%s) — keeping existing in-memory data",
                     exc,
                 )
                 return
-            data = raw.get("entries", {})
             for old_key in [k for k in data if k.count("\t") == 1]:
                 entry = data.pop(old_key)
                 album_lower = (entry.get("album") or "").lower().strip()

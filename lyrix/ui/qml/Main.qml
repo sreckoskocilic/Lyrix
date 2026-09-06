@@ -17,7 +17,6 @@ Window {
         html: ""
     })
     property int currentIndex: -1
-    property int pendingRemove: -1
     property real sashPos: Metrics.sidebar
 
     width: Metrics.windowWidth
@@ -107,8 +106,7 @@ Window {
         title: "Remove"
         buttons: MessageDialog.Yes | MessageDialog.No
         onAccepted: {
-            Controller.remove_confirmed(root.pendingRemove);
-            root.pendingRemove = -1;
+            Controller.remove_confirmed();
         }
     }
 
@@ -385,6 +383,8 @@ Window {
 
             Keys.onPressed: event => {
                 if (event.key === Qt.Key_Down || event.key === Qt.Key_Up) {
+                    if (tree.count === 0)
+                        return;
                     var step = event.key === Qt.Key_Down ? 1 : -1;
                     var next = Math.max(0, Math.min(tree.count - 1, root.currentIndex + step));
                     root.currentIndex = next;
@@ -707,7 +707,6 @@ Window {
             else if (action === "remove") {
                 var prompt = Controller.remove_prompt(root.currentIndex);
                 if (prompt !== "") {
-                    root.pendingRemove = root.currentIndex;
                     confirmDialog.text = prompt;
                     confirmDialog.open();
                 }
