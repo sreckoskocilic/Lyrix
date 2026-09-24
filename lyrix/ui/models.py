@@ -33,6 +33,10 @@ ROLES: tuple[str, ...] = (
 Node = dict[str, object]
 
 
+def _key(row: Node) -> tuple[object, ...]:
+    return (row["kind"], row["artist"], row["album"], row["title"])
+
+
 class CatalogModel(QAbstractListModel):
     def __init__(self) -> None:
         super().__init__()
@@ -59,9 +63,31 @@ class CatalogModel(QAbstractListModel):
         return self._rows[index.row()].get(name) if name is not None else None
 
     def set_rows(self, rows: list[Node]) -> None:
-        self.beginResetModel()
+        # Expanding or collapsing a node inserts or removes one contiguous
+        # block, so replace only the rows between the common head and tail.
+        # A full reset would throw the view back to the top.
+        old = self._rows
+        limit = min(len(old), len(rows))
+        head = 0
+        while head < limit and _key(old[head]) == _key(rows[head]):
+            head += 1
+        tail = 0
+        while tail < limit - head and _key(old[-1 - tail]) == _key(rows[-1 - tail]):
+            tail += 1
+        if len(old) - tail > head:
+            self.beginRemoveRows(NO_PARENT, head, len(old) - tail - 1)
+            self._rows = old[:head] + old[len(old) - tail :]
+            self.endRemoveRows()
+        if len(rows) - tail > head:
+            self.beginInsertRows(NO_PARENT, head, len(rows) - tail - 1)
+            self._rows = rows
+            self.endInsertRows()
         self._rows = rows
-        self.endResetModel()
+        # Kept rows can still change: the toggled node's arrow, counts, years.
+        for i in [*range(head), *range(len(rows) - tail, len(rows))]:
+            j = i if i < head else i - len(rows) + len(old)
+            if old[j] != rows[i]:
+                self.dataChanged.emit(self.index(i), self.index(i))
 
     def row_at(self, index: int) -> Node | None:
         return self._rows[index] if 0 <= index < len(self._rows) else None

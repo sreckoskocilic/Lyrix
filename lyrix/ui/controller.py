@@ -103,7 +103,7 @@ class Controller(QObject):
     songLoaded = Signal(dict)
     errorRaised = Signal(str, str)
     geniusReady = Signal(bool)
-    currentIndexChanged = Signal(int)
+    currentIndexChanged = Signal(int, bool)
     editingChanged = Signal(bool)
 
     _refreshRequested = Signal()
@@ -215,7 +215,7 @@ class Controller(QObject):
         self.refresh()
 
     @Slot()
-    def refresh(self) -> None:
+    def refresh(self, center: bool = True) -> None:
         self.catalog.reload()
         raw_entries = self.catalog.all_entries()
         total = len(raw_entries)
@@ -347,9 +347,9 @@ class Controller(QObject):
         else:
             self.countsChanged.emit(f"{artist_total} artists · {total} songs")
 
-        self._restore_selection()
+        self._restore_selection(center)
 
-    def _restore_selection(self) -> None:
+    def _restore_selection(self, center: bool) -> None:
         restore = self._pending_restore
         self._pending_restore = None
         if restore is None and self._current:
@@ -376,7 +376,7 @@ class Controller(QObject):
         index = self._model.index_of_song(
             entry["artist"], entry["title"], entry.get("album", "")
         )
-        self.currentIndexChanged.emit(index)
+        self.currentIndexChanged.emit(index, center)
 
     @Slot(int)
     def toggle(self, index: int) -> None:
@@ -389,7 +389,7 @@ class Controller(QObject):
                 self._expanded.discard(name)
             else:
                 self._expanded.add(name)
-            self.refresh()
+            self.refresh(center=False)
         elif row["kind"] == "album":
             bucket = (
                 str(row["artist"]).lower().strip(),
@@ -399,7 +399,7 @@ class Controller(QObject):
                 self._expanded_albums.discard(bucket)
             else:
                 self._expanded_albums.add(bucket)
-            self.refresh()
+            self.refresh(center=False)
 
     @Slot(int)
     def expand(self, index: int) -> None:

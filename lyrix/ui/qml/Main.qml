@@ -65,10 +65,10 @@ Window {
             root.geniusOk = ok;
         }
 
-        function onCurrentIndexChanged(index) {
+        function onCurrentIndexChanged(index, center) {
             root.currentIndex = index;
             // The list has no geometry yet on startup; centre once it is laid out.
-            if (index >= 0)
+            if (index >= 0 && center)
                 Qt.callLater(() => tree.positionViewAtIndex(index, ListView.Center));
         }
 
