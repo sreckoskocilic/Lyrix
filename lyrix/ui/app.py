@@ -22,7 +22,7 @@ LOG_PATH = _BASE_DIR / "lyrix.log"
 
 
 def _setup_logging() -> None:
-    """Log warnings and errors to ~/.lyrix/lyrix.log (256 KB, one backup)."""
+    """Log to ~/.lyrix/lyrix.log (INFO and up, 256 KB, one backup)."""
     if logging.root.handlers:
         return
     _BASE_DIR.mkdir(parents=True, exist_ok=True)

@@ -359,7 +359,8 @@ class Controller(QObject):
                 "album": self._current.get("album", ""),
             }
         if restore is None:
-            if self._current is None and not self._editing:
+            if self._current is None:
+                self.cancel_edit()
                 self._show_placeholder()
             return
         entry = self.catalog.get(
@@ -369,6 +370,7 @@ class Controller(QObject):
         )
         if entry is None:
             self._current = None
+            self.cancel_edit()
             self._show_placeholder()
             return
         self._current = entry
@@ -431,6 +433,9 @@ class Controller(QObject):
     # ── Lyrics display ────────────────────────────────────────────────────────
 
     def _emit_song(self, entry: dict) -> None:
+        # Rendering would swap the editor to rich text and Save would store HTML.
+        if self._editing:
+            return
         lyrics = entry.get("lyrics", "")
         self.songLoaded.emit(
             {
@@ -772,7 +777,10 @@ class Controller(QObject):
             self.catalog.add(
                 artist, ss_title, album_name, year, ss.to_text(), track=track
             )
-            if ss_title != title or album_name != album:
+            # Keys ignore case: a case-only rename already overwrote the old entry.
+            if Catalog._key(artist, ss_title, album_name) != Catalog._key(
+                artist, title, album
+            ):
                 self.catalog.remove(artist, title, album)
         except Exception as exc:
             self._idle()
@@ -868,15 +876,20 @@ class Controller(QObject):
                     continue
                 album_data = getattr(ss, "album", {}) or {}
                 ss_title = ss.title.strip()
-                if ss_title != title:
+                new_album = (
+                    album_data.get("name")
+                    or (existing or {}).get("album", "")
+                    or album_name
+                )
+                if Catalog._key(song_artist, ss_title, new_album) != Catalog._key(
+                    song_artist, title, album_name
+                ):
                     title_changes.append((song_artist, title, album_name))
                 song_entries.append(
                     {
                         "artist": song_artist,
                         "title": ss_title,
-                        "album": album_data.get("name")
-                        or (existing or {}).get("album", "")
-                        or album_name,
+                        "album": new_album,
                         "year": _release_year(album_data)
                         or (existing or {}).get("year", ""),
                         "lyrics": ss.to_text(),

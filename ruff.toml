@@ -6,7 +6,7 @@ target-version = "py312"
 [lint]
 # Keep ruff's defaults, minus rules that fight this codebase on purpose.
 ignore = [
-    # Broad `except Exception` is deliberate: tkinter callbacks, Genius API
+    # Broad `except Exception` is deliberate: Qt slots, Genius API
     # calls and JSON persistence must never take down the UI. Failures are
     # logged or surfaced in the status bar at each call site.
     "BLE001",

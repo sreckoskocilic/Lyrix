@@ -51,7 +51,7 @@ Everything lives in `~/.lyrix/` (macOS/Linux) or `%APPDATA%\Lyrix\` (Windows):
 |------|------------|
 | `lyrics_catalog.json` | All fetched lyrics |
 | `settings-qt.json` | Window geometry, sash position, expanded artists and albums, last selected song, font size |
-| `lyrix.log` | Warnings and errors |
+| `lyrix.log` | App log (info, warnings, errors) |
 
 ## Building
 

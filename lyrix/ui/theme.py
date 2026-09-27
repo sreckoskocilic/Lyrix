@@ -1,6 +1,6 @@
 """Palette, fonts and metrics for the QML UI.
 
-Values match mockups/06b-dense-large.html: lyr=16 ui=15 lh=1.30 row=1
+Dense large layout: lyr=16 ui=15 lh=1.30 row=1
 win=1020 side=360 sec=#c98a4b.
 """
 
